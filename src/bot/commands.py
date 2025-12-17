@@ -44,8 +44,11 @@ def setup_commands(bot: commands.Bot) -> None:
                 )
                 return
 
+            guild = interaction.guild
+            assert guild.id is not None  # For mypy - guild commands always have guild_id
+
             # Check if user is server owner or administrator
-            if not (interaction.user.id == interaction.guild.owner_id or interaction.user.guild_permissions.administrator):
+            if not (interaction.user.id == guild.owner_id or interaction.user.guild_permissions.administrator):
                 await interaction.followup.send(
                     "❌ Only the server owner or administrators can run this command.",
                     ephemeral=True,
@@ -56,7 +59,7 @@ def setup_commands(bot: commands.Bot) -> None:
             async with get_db_session() as db_session:
                 existing_config = await GuildConfigRepository.get_by_guild_id(
                     db_session,
-                    interaction.guild_id,
+                    guild.id,
                 )
 
                 if existing_config:
@@ -83,8 +86,8 @@ def setup_commands(bot: commands.Bot) -> None:
                 # Create guild config
                 await GuildConfigRepository.create(
                     db_session,
-                    guild_id=interaction.guild_id,
-                    guild_name=interaction.guild.name,
+                    guild_id=guild.id,
+                    guild_name=guild.name,
                     verified_role_id=verified_role.id,
                     setup_by_user_id=interaction.user.id,
                     setup_by_username=str(interaction.user),
@@ -126,7 +129,7 @@ def setup_commands(bot: commands.Bot) -> None:
             )
 
             await interaction.followup.send(embed=embed, ephemeral=True)
-            logger.info(f"Guild {interaction.guild_id} ({interaction.guild.name}) configured by {interaction.user.id}")
+            logger.info(f"Guild {guild.id} ({guild.name}) configured by {interaction.user.id}")
 
         except RecordAlreadyExistsError as e:
             await interaction.followup.send(f"❌ {e.user_message}", ephemeral=True)

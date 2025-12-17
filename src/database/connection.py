@@ -44,7 +44,7 @@ def get_session_factory() -> sessionmaker:
             expire_on_commit=False,
             autocommit=False,
             autoflush=False,
-        )
+        )  # type: ignore[call-overload]
         logger.info("Session factory created")
     return _session_factory
 
