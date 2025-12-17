@@ -73,7 +73,7 @@ def setup_commands(bot: commands.Bot) -> None:
                     admin_role_ids_str = ",".join(role_ids)
 
                 # Create guild config
-                guild_config = await GuildConfigRepository.create(
+                await GuildConfigRepository.create(
                     db_session,
                     guild_id=interaction.guild_id,
                     guild_name=interaction.guild.name,

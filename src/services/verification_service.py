@@ -96,7 +96,7 @@ class VerificationService:
             )
 
         # Create or update verification record
-        verification = await UserVerificationRepository.upsert(
+        await UserVerificationRepository.upsert(
             db_session,
             discord_user_id=discord_user_id,
             twitch_user_id=twitch_user_id,

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import config
 from src.database.models import GuildConfig, OAuthSession, UserVerification, VerificationAuditLog
-from src.shared.exceptions import RecordAlreadyExistsError, RecordNotFoundError
+from src.shared.exceptions import RecordAlreadyExistsError
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class UserVerificationRepository:
             raise RecordAlreadyExistsError(
                 "User verification already exists",
                 "This Discord or Twitch account is already linked."
-            )
+            ) from e
 
     @staticmethod
     async def get_by_discord_id(session: AsyncSession, discord_user_id: int) -> UserVerification | None:
@@ -204,7 +204,7 @@ class OAuthSessionRepository:
         result = await session.execute(
             delete(OAuthSession).where(
                 OAuthSession.expires_at < datetime.utcnow(),
-                OAuthSession.twitch_oauth_completed == False,
+                OAuthSession.twitch_oauth_completed is False,
             )
         )
         await session.flush()
@@ -315,7 +315,7 @@ class GuildConfigRepository:
             raise RecordAlreadyExistsError(
                 "Guild configuration already exists",
                 "This server has already been set up."
-            )
+            ) from e
 
     @staticmethod
     async def get_by_guild_id(session: AsyncSession, guild_id: int) -> GuildConfig | None:

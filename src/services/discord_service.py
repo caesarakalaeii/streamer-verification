@@ -66,7 +66,7 @@ class DiscordService:
             raise DiscordAPIError(
                 f"Discord API request failed: {e}",
                 "Failed to connect to Discord.",
-            )
+            ) from e
 
     @staticmethod
     async def exchange_code_for_token(code: str) -> str:
@@ -125,7 +125,7 @@ class DiscordService:
             raise DiscordAPIError(
                 f"Discord API request failed: {e}",
                 "Failed to connect to Discord. Please try again.",
-            )
+            ) from e
 
     @staticmethod
     async def get_user_info(access_token: str) -> dict[str, Any]:
@@ -170,7 +170,7 @@ class DiscordService:
             raise DiscordAPIError(
                 f"Discord API request failed: {e}",
                 "Failed to connect to Discord. Please try again.",
-            )
+            ) from e
 
     @staticmethod
     async def push_role_connection_metadata(
@@ -227,7 +227,7 @@ class DiscordService:
             raise DiscordAPIError(
                 f"Discord API request failed: {e}",
                 "Failed to connect to Discord. Please try again.",
-            )
+            ) from e
 
 
 # Global instance

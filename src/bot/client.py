@@ -5,8 +5,6 @@ import logging
 import discord
 from discord.ext import commands
 
-from src.config import config
-
 logger = logging.getLogger(__name__)
 
 

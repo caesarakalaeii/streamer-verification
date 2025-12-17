@@ -6,7 +6,6 @@ from typing import Optional
 from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse
 
-from src.config import config
 from src.database.connection import get_db_session
 from src.database.repositories import VerificationAuditLogRepository
 from src.services.discord_service import discord_service
@@ -201,7 +200,6 @@ async def linked_role_callback(
         # Get Discord user info
         discord_user = await discord_service.get_user_info(discord_access_token)
         discord_user_id = int(discord_user["id"])
-        discord_username = discord_user["username"]
 
         # Store Discord token and user ID in session for Twitch callback
         # We'll use state parameter to pass this through Twitch OAuth

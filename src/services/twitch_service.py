@@ -101,7 +101,7 @@ class TwitchService:
             raise TwitchAPIError(
                 f"Twitch API request failed: {e}",
                 "Failed to connect to Twitch. Please try again.",
-            )
+            ) from e
 
     @staticmethod
     async def get_user_info(access_token: str) -> dict[str, Any]:
@@ -157,7 +157,7 @@ class TwitchService:
             raise TwitchAPIError(
                 f"Twitch API request failed: {e}",
                 "Failed to connect to Twitch. Please try again.",
-            )
+            ) from e
 
 
 # Global instance
