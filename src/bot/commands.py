@@ -483,6 +483,13 @@ def setup_commands(bot: commands.Bot) -> None:
                     f"• Nickname Enforcement → {'✅ Enabled' if nickname_enforcement else '❌ Disabled'}"
                 )
 
+            if not changes:
+                await interaction.followup.send(
+                    "⚠️ No changes were made. Provide at least one parameter to update.",
+                    ephemeral=True,
+                )
+                return
+
             embed = discord.Embed(
                 title="✅ Configuration Updated",
                 description="The following settings have been updated:",
