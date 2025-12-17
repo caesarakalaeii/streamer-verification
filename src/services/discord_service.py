@@ -8,6 +8,8 @@ import httpx
 from src.config import config
 from src.shared.constants import (
     DISCORD_API_BASE,
+    DISCORD_OAUTH_AUTHORIZE,
+    DISCORD_OAUTH_SCOPES,
     DISCORD_OAUTH_TOKEN,
     DISCORD_USERS_ME,
 )
@@ -18,6 +20,33 @@ logger = logging.getLogger(__name__)
 
 class DiscordService:
     """Service for Discord Linked Roles API interactions."""
+
+    @staticmethod
+    def get_oauth_url(state: str | None = None) -> str:
+        """
+        Generate Discord OAuth authorization URL for Linked Roles.
+
+        Args:
+            state: Optional state parameter for CSRF protection
+
+        Returns:
+            Full OAuth authorization URL
+        """
+        scopes = " ".join(DISCORD_OAUTH_SCOPES)
+        params = {
+            "client_id": config.discord_oauth_client_id,
+            "redirect_uri": config.discord_oauth_redirect_uri,
+            "response_type": "code",
+            "scope": scopes,
+        }
+
+        if state:
+            params["state"] = state
+
+        param_str = "&".join(f"{k}={v}" for k, v in params.items())
+        url = f"{DISCORD_OAUTH_AUTHORIZE}?{param_str}"
+        logger.debug(f"Generated Discord OAuth URL for Linked Roles")
+        return url
 
     @staticmethod
     async def register_metadata() -> None:

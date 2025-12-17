@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.database.connection import get_db_session
 from src.database.repositories import VerificationAuditLogRepository
@@ -159,6 +159,28 @@ def render_oauth_page(title: str, message: str, button_text: str, oauth_url: str
     </html>
     """
     return HTMLResponse(content=html_content)
+
+
+@router.get("/discord-verify")
+async def discord_verify():
+    """
+    Discord Linked Roles verification initiation endpoint.
+
+    This is the entry point when users click "Link" in Discord Connections.
+    Redirects users to Discord OAuth authorization.
+    """
+    try:
+        # Generate Discord OAuth URL
+        oauth_url = discord_service.get_oauth_url()
+        logger.info("Redirecting user to Discord OAuth for Linked Roles verification")
+        return RedirectResponse(url=oauth_url)
+    except Exception as e:
+        logger.error(f"Error initiating Discord OAuth: {e}", exc_info=True)
+        return render_html_page(
+            "Error",
+            "Failed to start verification. Please try again from your Discord profile settings.",
+            is_error=True,
+        )
 
 
 @router.get("/linked-role", response_class=HTMLResponse)
