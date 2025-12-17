@@ -120,7 +120,7 @@ class UserVerificationRepository:
             )
         )
         await session.flush()
-        deleted = result.rowcount > 0
+        deleted = result.rowcount > 0  # type: ignore[attr-defined]
         if deleted:
             logger.info(f"Deleted verification for Discord user {discord_user_id}")
         return deleted
@@ -244,7 +244,7 @@ class OAuthSessionRepository:
             )
         )
         await session.flush()
-        deleted_count = result.rowcount
+        deleted_count = result.rowcount  # type: ignore[attr-defined]
         if deleted_count > 0:
             logger.info(f"Cleaned up {deleted_count} expired OAuth sessions")
         return deleted_count
@@ -393,7 +393,7 @@ class GuildConfigRepository:
             delete(GuildConfig).where(GuildConfig.guild_id == guild_id)
         )
         await session.flush()
-        deleted = result.rowcount > 0
+        deleted = result.rowcount > 0  # type: ignore[attr-defined]
         if deleted:
             logger.info(f"Deleted guild config for guild {guild_id}")
         return deleted

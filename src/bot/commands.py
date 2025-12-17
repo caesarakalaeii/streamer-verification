@@ -453,9 +453,10 @@ def setup_commands(bot: commands.Bot) -> None:
 
                     role_ids = re.findall(r"<@&(\d+)>|(\d+)", admin_roles)
                     role_ids = [r[0] or r[1] for r in role_ids]
-                    update_kwargs["admin_role_ids"] = (
+                    admin_role_ids_value: str | None = (
                         ",".join(role_ids) if role_ids else None
                     )
+                    update_kwargs["admin_role_ids"] = admin_role_ids_value
 
                 if nickname_enforcement is not None:
                     update_kwargs["nickname_enforcement_enabled"] = nickname_enforcement
@@ -531,9 +532,12 @@ def setup_commands(bot: commands.Bot) -> None:
                 inline=False,
             )
 
+            bot_name = (
+                interaction.client.user.name if interaction.client.user else "this app"
+            )
             embed.add_field(
                 name="Step 3: Find This App",
-                value=f"Look for **{interaction.client.user.name}** in the list of available connections",
+                value=f"Look for **{bot_name}** in the list of available connections",
                 inline=False,
             )
 
