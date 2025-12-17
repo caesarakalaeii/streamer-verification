@@ -99,12 +99,14 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to update updated_at on user_verifications
+DROP TRIGGER IF EXISTS update_user_verifications_updated_at ON user_verifications;
 CREATE TRIGGER update_user_verifications_updated_at
     BEFORE UPDATE ON user_verifications
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
 -- Trigger to update updated_at on guild_config
+DROP TRIGGER IF EXISTS update_guild_config_updated_at ON guild_config;
 CREATE TRIGGER update_guild_config_updated_at
     BEFORE UPDATE ON guild_config
     FOR EACH ROW
