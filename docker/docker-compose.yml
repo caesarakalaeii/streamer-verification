@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: verification-postgres
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-streamer_verification}
+      POSTGRES_USER: ${DATABASE_USER:-bot_user}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../src/database/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${DATABASE_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-bot_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - verification-network
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: verification-bot
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    volumes:
+      - bot_logs:/var/log/bot
+    networks:
+      - verification-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: verification-postgres-data
+  bot_logs:
+    name: verification-bot-logs
+
+networks:
+  verification-network:
+    name: verification-network
+    driver: bridge
