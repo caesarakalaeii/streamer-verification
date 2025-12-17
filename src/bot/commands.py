@@ -19,8 +19,9 @@ def setup_commands(bot: commands.Bot) -> None:
 
     @bot.tree.command(
         name="setup",
-        description="[Owner] Set up the bot for this server",
+        description="Set up the bot for this server",
     )
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
         verified_role="The role to automatically assign when users verify their Twitch account",
         admin_roles="Optional: Roles that can use admin commands (comma-separated mentions or IDs)",
@@ -152,8 +153,9 @@ def setup_commands(bot: commands.Bot) -> None:
 
     @bot.tree.command(
         name="unverify",
-        description="[Admin] Remove a user's Twitch verification",
+        description="Remove a user's Twitch verification",
     )
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(user="The user to unverify")
     async def unverify(interaction: discord.Interaction, user: discord.Member):
         """
@@ -237,8 +239,9 @@ def setup_commands(bot: commands.Bot) -> None:
 
     @bot.tree.command(
         name="list-verified",
-        description="[Admin] List all verified users in this server",
+        description="List all verified users in this server",
     )
+    @app_commands.default_permissions(administrator=True)
     async def list_verified(interaction: discord.Interaction):
         """
         List verified users command: Show all verified users in this guild (admin only).
@@ -304,8 +307,9 @@ def setup_commands(bot: commands.Bot) -> None:
                 color=discord.Color.green(),
             )
 
-            # Add up to 25 fields (Discord limit)
-            for verification in verifications[:25]:
+            # Build a text list instead of fields to handle hundreds of users
+            user_list = []
+            for verification in verifications:
                 discord_user = interaction.guild.get_member(
                     verification.discord_user_id
                 )
@@ -314,19 +318,54 @@ def setup_commands(bot: commands.Bot) -> None:
                     if discord_user
                     else f"<@{verification.discord_user_id}>"
                 )
-
-                embed.add_field(
-                    name=f"Twitch: {verification.twitch_username}",
-                    value=f"Discord: {discord_mention}",
-                    inline=False,
+                twitch_name = (
+                    verification.twitch_display_name or verification.twitch_username
                 )
+                user_list.append(f"**{twitch_name}** → {discord_mention}")
 
-            if len(verifications) > 25:
+            # Discord embed description limit is 4096 chars
+            # If list is too long, paginate
+            user_text = "\n".join(user_list)
+            if len(user_text) > 4000:
+                # Split into chunks
+                chunks = []
+                current_chunk = []
+                current_length = 0
+
+                for line in user_list:
+                    line_length = len(line) + 1  # +1 for newline
+                    if current_length + line_length > 4000:
+                        chunks.append("\n".join(current_chunk))
+                        current_chunk = [line]
+                        current_length = line_length
+                    else:
+                        current_chunk.append(line)
+                        current_length += line_length
+
+                if current_chunk:
+                    chunks.append("\n".join(current_chunk))
+
+                # Send first chunk
+                embed.description = chunks[0]
                 embed.set_footer(
-                    text=f"Showing first 25 of {len(verifications)} verified users"
+                    text=f"Page 1 of {len(chunks)} • {len(verifications)} total users"
                 )
+                await interaction.followup.send(embed=embed, ephemeral=True)
 
-            await interaction.followup.send(embed=embed, ephemeral=True)
+                # Send remaining chunks
+                for i, chunk in enumerate(chunks[1:], start=2):
+                    page_embed = discord.Embed(
+                        title=f"✅ Verified Users (continued)",
+                        description=chunk,
+                        color=discord.Color.green(),
+                    )
+                    page_embed.set_footer(
+                        text=f"Page {i} of {len(chunks)} • {len(verifications)} total users"
+                    )
+                    await interaction.followup.send(embed=page_embed, ephemeral=True)
+            else:
+                embed.description = user_text
+                await interaction.followup.send(embed=embed, ephemeral=True)
             logger.info(
                 f"List verified command executed by admin {interaction.user.id}"
             )
@@ -340,8 +379,9 @@ def setup_commands(bot: commands.Bot) -> None:
 
     @bot.tree.command(
         name="config",
-        description="[Admin] View or update server configuration",
+        description="View or update server configuration",
     )
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
         verified_role="Optional: Update the verified role",
         admin_roles="Optional: Update admin roles (comma-separated mentions or IDs)",
