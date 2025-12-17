@@ -45,7 +45,7 @@ class DiscordService:
 
         param_str = "&".join(f"{k}={v}" for k, v in params.items())
         url = f"{DISCORD_OAUTH_AUTHORIZE}?{param_str}"
-        logger.debug(f"Generated Discord OAuth URL for Linked Roles")
+        logger.debug("Generated Discord OAuth URL for Linked Roles")
         return url
 
     @staticmethod
