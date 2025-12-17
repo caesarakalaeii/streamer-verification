@@ -355,7 +355,7 @@ def setup_commands(bot: commands.Bot) -> None:
                 # Send remaining chunks
                 for i, chunk in enumerate(chunks[1:], start=2):
                     page_embed = discord.Embed(
-                        title=f"✅ Verified Users (continued)",
+                        title="✅ Verified Users (continued)",
                         description=chunk,
                         color=discord.Color.green(),
                     )
