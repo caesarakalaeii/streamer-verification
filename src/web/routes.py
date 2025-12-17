@@ -86,7 +86,9 @@ def render_html_page(title: str, message: str, is_error: bool = False) -> HTMLRe
     return HTMLResponse(content=html_content, status_code=status_code)
 
 
-def render_oauth_page(title: str, message: str, button_text: str, oauth_url: str) -> HTMLResponse:
+def render_oauth_page(
+    title: str, message: str, button_text: str, oauth_url: str
+) -> HTMLResponse:
     """Render a page with OAuth button."""
     html_content = f"""
     <!DOCTYPE html>
@@ -230,7 +232,9 @@ async def linked_role_callback(
         # Generate Twitch OAuth URL with session data in state
         twitch_oauth_url = twitch_service.get_oauth_url(session_data)
 
-        logger.info(f"Discord OAuth completed for user {discord_user_id}, redirecting to Twitch")
+        logger.info(
+            f"Discord OAuth completed for user {discord_user_id}, redirecting to Twitch"
+        )
 
         return render_oauth_page(
             title="Link Your Twitch Account",
@@ -333,11 +337,14 @@ async def twitch_oauth_callback(
             twitch_username,
         )
 
-        logger.info(f"✅ Linked role verification completed: Discord {discord_user_id} → Twitch {twitch_username}")
+        logger.info(
+            f"✅ Linked role verification completed: Discord {discord_user_id} → Twitch {twitch_username}"
+        )
 
         # Immediately assign role and set nickname in all configured guilds
         try:
             from src.services.post_verification_service import post_verification_service
+
             async with get_db_session() as db_session:
                 await post_verification_service.assign_role_and_nickname(
                     db_session,
@@ -347,7 +354,9 @@ async def twitch_oauth_callback(
                 )
         except Exception as e:
             # Log error but don't fail the verification flow
-            logger.error(f"Failed to assign role/nickname immediately: {e}", exc_info=True)
+            logger.error(
+                f"Failed to assign role/nickname immediately: {e}", exc_info=True
+            )
 
         return render_html_page(
             "Verification Complete!",

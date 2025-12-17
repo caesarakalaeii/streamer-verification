@@ -54,7 +54,9 @@ class VerificationService:
             TwitchAccountAlreadyLinkedError: Twitch account already linked to different Discord
         """
         # Check if Discord user is already linked to a different Twitch account
-        existing_discord = await UserVerificationRepository.get_by_discord_id(db_session, discord_user_id)
+        existing_discord = await UserVerificationRepository.get_by_discord_id(
+            db_session, discord_user_id
+        )
         if existing_discord and existing_discord.twitch_user_id != twitch_user_id:
             logger.warning(
                 f"Discord user {discord_user_id} already linked to Twitch {existing_discord.twitch_user_id}, "
@@ -75,7 +77,9 @@ class VerificationService:
             )
 
         # Check if Twitch account is already linked to a different Discord user
-        existing_twitch = await UserVerificationRepository.get_by_twitch_id(db_session, twitch_user_id)
+        existing_twitch = await UserVerificationRepository.get_by_twitch_id(
+            db_session, twitch_user_id
+        )
         if existing_twitch and existing_twitch.discord_user_id != discord_user_id:
             logger.warning(
                 f"Twitch user {twitch_user_id} already linked to Discord {existing_twitch.discord_user_id}, "
@@ -114,7 +118,9 @@ class VerificationService:
             action=AUDIT_ACTION_VERIFY_SUCCESS,
         )
 
-        logger.info(f"✅ Verified Discord user {discord_user_id} → Twitch user {twitch_username}")
+        logger.info(
+            f"✅ Verified Discord user {discord_user_id} → Twitch user {twitch_username}"
+        )
 
     @staticmethod
     async def unverify_user(
@@ -134,10 +140,14 @@ class VerificationService:
             True if user was unverified, False if not found
         """
         # Get existing verification for audit log
-        existing = await UserVerificationRepository.get_by_discord_id(db_session, discord_user_id)
+        existing = await UserVerificationRepository.get_by_discord_id(
+            db_session, discord_user_id
+        )
 
         # Delete verification
-        deleted = await UserVerificationRepository.delete_by_discord_id(db_session, discord_user_id)
+        deleted = await UserVerificationRepository.delete_by_discord_id(
+            db_session, discord_user_id
+        )
 
         if deleted and existing:
             # Create audit log entry
@@ -147,16 +157,24 @@ class VerificationService:
                 twitch_user_id=existing.twitch_user_id,
                 twitch_username=existing.twitch_username,
                 action="unverify",
-                reason=f"unverified_by_admin_{admin_username}" if admin_username else "unverified",
+                reason=(
+                    f"unverified_by_admin_{admin_username}"
+                    if admin_username
+                    else "unverified"
+                ),
             )
             logger.info(f"Unverified Discord user {discord_user_id}")
 
         return deleted
 
     @staticmethod
-    async def get_verification_by_discord_id(db_session: AsyncSession, discord_user_id: int):
+    async def get_verification_by_discord_id(
+        db_session: AsyncSession, discord_user_id: int
+    ):
         """Get verification by Discord user ID."""
-        return await UserVerificationRepository.get_by_discord_id(db_session, discord_user_id)
+        return await UserVerificationRepository.get_by_discord_id(
+            db_session, discord_user_id
+        )
 
     @staticmethod
     async def get_all_verifications(db_session: AsyncSession):

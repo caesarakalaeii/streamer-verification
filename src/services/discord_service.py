@@ -82,7 +82,9 @@ class DiscordService:
 
                 if response.status_code not in (200, 201):
                     error_data = response.json() if response.content else {}
-                    logger.error(f"Failed to register metadata: {response.status_code}, {error_data}")
+                    logger.error(
+                        f"Failed to register metadata: {response.status_code}, {error_data}"
+                    )
                     raise DiscordAPIError(
                         f"Failed to register metadata: {response.status_code}",
                         "Failed to configure Discord integration.",
@@ -130,7 +132,9 @@ class DiscordService:
 
                 if response.status_code != 200:
                     error_data = response.json() if response.content else {}
-                    logger.error(f"Discord token exchange failed: {response.status_code}, {error_data}")
+                    logger.error(
+                        f"Discord token exchange failed: {response.status_code}, {error_data}"
+                    )
                     raise DiscordAPIError(
                         f"Failed to exchange code for token: {response.status_code}",
                         "Failed to authenticate with Discord. Please try again.",
@@ -184,14 +188,18 @@ class DiscordService:
 
                 if response.status_code != 200:
                     error_data = response.json() if response.content else {}
-                    logger.error(f"Discord user info fetch failed: {response.status_code}, {error_data}")
+                    logger.error(
+                        f"Discord user info fetch failed: {response.status_code}, {error_data}"
+                    )
                     raise DiscordAPIError(
                         f"Failed to fetch user info: {response.status_code}",
                         "Failed to fetch your Discord information. Please try again.",
                     )
 
                 user_data: dict[str, Any] = response.json()
-                logger.info(f"Fetched Discord user info: {user_data.get('id')} ({user_data.get('username')})")
+                logger.info(
+                    f"Fetched Discord user info: {user_data.get('id')} ({user_data.get('username')})"
+                )
                 return user_data
 
         except httpx.RequestError as e:
@@ -243,13 +251,17 @@ class DiscordService:
 
                 if response.status_code not in (200, 201):
                     error_data = response.json() if response.content else {}
-                    logger.error(f"Failed to push role connection: {response.status_code}, {error_data}")
+                    logger.error(
+                        f"Failed to push role connection: {response.status_code}, {error_data}"
+                    )
                     raise DiscordAPIError(
                         f"Failed to push role connection: {response.status_code}",
                         "Failed to update your Discord profile. Please try again.",
                     )
 
-                logger.info(f"Successfully pushed role connection metadata for Twitch user: {twitch_username}")
+                logger.info(
+                    f"Successfully pushed role connection metadata for Twitch user: {twitch_username}"
+                )
 
         except httpx.RequestError as e:
             logger.error(f"Discord API request error: {e}")

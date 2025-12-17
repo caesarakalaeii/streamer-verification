@@ -35,7 +35,9 @@ class PostVerificationService:
         """
         bot = get_bot_instance()
         if not bot:
-            logger.warning("Bot instance not available, skipping immediate role/nickname assignment")
+            logger.warning(
+                "Bot instance not available, skipping immediate role/nickname assignment"
+            )
             return
 
         target_nickname = twitch_display_name or twitch_username
@@ -55,7 +57,9 @@ class PostVerificationService:
                     guild.id,
                 )
                 if not guild_config:
-                    logger.debug(f"Guild {guild.id} ({guild.name}) not configured, skipping")
+                    logger.debug(
+                        f"Guild {guild.id} ({guild.name}) not configured, skipping"
+                    )
                     continue
 
                 # Assign verified role
@@ -63,7 +67,9 @@ class PostVerificationService:
                 if role:
                     if role not in member.roles:
                         try:
-                            await member.add_roles(role, reason="Twitch verification complete")
+                            await member.add_roles(
+                                role, reason="Twitch verification complete"
+                            )
                             logger.info(
                                 f"✅ Assigned role {role.name} to {member.id} in guild {guild.id} ({guild.name})"
                             )
@@ -76,7 +82,9 @@ class PostVerificationService:
                                 f"Failed to assign role {role.name} to {member.id} in guild {guild.id}: {e}"
                             )
                     else:
-                        logger.debug(f"User {member.id} already has role {role.name} in guild {guild.id}")
+                        logger.debug(
+                            f"User {member.id} already has role {role.name} in guild {guild.id}"
+                        )
                 else:
                     logger.warning(
                         f"Configured verified role {guild_config.verified_role_id} not found in guild {guild.id}"
@@ -86,7 +94,10 @@ class PostVerificationService:
                 if guild_config.nickname_enforcement_enabled:
                     if member.nick != target_nickname:
                         try:
-                            await member.edit(nick=target_nickname, reason="Twitch verification complete")
+                            await member.edit(
+                                nick=target_nickname,
+                                reason="Twitch verification complete",
+                            )
                             logger.info(
                                 f"✅ Set nickname to '{target_nickname}' for {member.id} in guild {guild.id} ({guild.name})"
                             )

@@ -27,7 +27,9 @@ def get_engine() -> AsyncEngine:
             pool_size=config.database_pool_size,
             max_overflow=config.database_max_overflow,
             pool_pre_ping=True,  # Verify connections before using
-            poolclass=NullPool if config.debug_mode else None,  # Disable pooling in debug mode
+            poolclass=(
+                NullPool if config.debug_mode else None
+            ),  # Disable pooling in debug mode
         )
         logger.info("Database engine created", extra={"database": config.database_name})
     return _engine

@@ -77,7 +77,9 @@ class TwitchService:
 
                 if response.status_code != 200:
                     error_data = response.json() if response.content else {}
-                    logger.error(f"Twitch token exchange failed: {response.status_code}, {error_data}")
+                    logger.error(
+                        f"Twitch token exchange failed: {response.status_code}, {error_data}"
+                    )
                     raise TwitchAPIError(
                         f"Failed to exchange code for token: {response.status_code}",
                         "Failed to authenticate with Twitch. Please try again.",
@@ -132,7 +134,9 @@ class TwitchService:
 
                 if response.status_code != 200:
                     error_data = response.json() if response.content else {}
-                    logger.error(f"Twitch user info fetch failed: {response.status_code}, {error_data}")
+                    logger.error(
+                        f"Twitch user info fetch failed: {response.status_code}, {error_data}"
+                    )
                     raise TwitchAPIError(
                         f"Failed to fetch user info: {response.status_code}",
                         "Failed to fetch your Twitch information. Please try again.",
@@ -149,7 +153,9 @@ class TwitchService:
                     )
 
                 user_data: dict[str, Any] = data[0]
-                logger.info(f"Fetched Twitch user info: {user_data.get('id')} ({user_data.get('login')})")
+                logger.info(
+                    f"Fetched Twitch user info: {user_data.get('id')} ({user_data.get('login')})"
+                )
                 return user_data
 
         except httpx.RequestError as e:

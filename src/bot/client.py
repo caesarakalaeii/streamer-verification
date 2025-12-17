@@ -28,7 +28,9 @@ def create_bot() -> commands.Bot:
 
         # List guilds
         for guild in bot.guilds:
-            logger.info(f"  - {guild.name} (ID: {guild.id}, Members: {guild.member_count})")
+            logger.info(
+                f"  - {guild.name} (ID: {guild.id}, Members: {guild.member_count})"
+            )
 
         # Sync slash commands globally
         try:

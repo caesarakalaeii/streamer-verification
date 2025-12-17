@@ -23,7 +23,7 @@ def setup_commands(bot: commands.Bot) -> None:
     )
     @app_commands.describe(
         verified_role="The role to automatically assign when users verify their Twitch account",
-        admin_roles="Optional: Roles that can use admin commands (comma-separated mentions or IDs)"
+        admin_roles="Optional: Roles that can use admin commands (comma-separated mentions or IDs)",
     )
     async def setup(
         interaction: discord.Interaction,
@@ -37,7 +37,9 @@ def setup_commands(bot: commands.Bot) -> None:
 
         try:
             # Ensure we're in a guild
-            if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            if not interaction.guild or not isinstance(
+                interaction.user, discord.Member
+            ):
                 await interaction.followup.send(
                     "❌ This command can only be used in a server.",
                     ephemeral=True,
@@ -45,10 +47,15 @@ def setup_commands(bot: commands.Bot) -> None:
                 return
 
             guild = interaction.guild
-            assert guild.id is not None  # For mypy - guild commands always have guild_id
+            assert (
+                guild.id is not None
+            )  # For mypy - guild commands always have guild_id
 
             # Check if user is server owner or administrator
-            if not (interaction.user.id == guild.owner_id or interaction.user.guild_permissions.administrator):
+            if not (
+                interaction.user.id == guild.owner_id
+                or interaction.user.guild_permissions.administrator
+            ):
                 await interaction.followup.send(
                     "❌ Only the server owner or administrators can run this command.",
                     ephemeral=True,
@@ -79,7 +86,8 @@ def setup_commands(bot: commands.Bot) -> None:
                 if admin_roles:
                     # Extract role IDs from mentions or raw IDs
                     import re
-                    role_ids = re.findall(r'<@&(\d+)>|(\d+)', admin_roles)
+
+                    role_ids = re.findall(r"<@&(\d+)>|(\d+)", admin_roles)
                     role_ids = [r[0] or r[1] for r in role_ids]
                     admin_role_ids_str = ",".join(role_ids)
 
@@ -129,7 +137,9 @@ def setup_commands(bot: commands.Bot) -> None:
             )
 
             await interaction.followup.send(embed=embed, ephemeral=True)
-            logger.info(f"Guild {guild.id} ({guild.name}) configured by {interaction.user.id}")
+            logger.info(
+                f"Guild {guild.id} ({guild.name}) configured by {interaction.user.id}"
+            )
 
         except RecordAlreadyExistsError as e:
             await interaction.followup.send(f"❌ {e.user_message}", ephemeral=True)
@@ -153,7 +163,9 @@ def setup_commands(bot: commands.Bot) -> None:
 
         try:
             # Ensure we're in a guild
-            if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            if not interaction.guild or not isinstance(
+                interaction.user, discord.Member
+            ):
                 await interaction.followup.send(
                     "❌ This command can only be used in a server.",
                     ephemeral=True,
@@ -195,13 +207,17 @@ def setup_commands(bot: commands.Bot) -> None:
                     f"✅ Successfully unverified {user.mention}",
                     ephemeral=True,
                 )
-                logger.info(f"User {user.id} unverified by admin {interaction.user.id} in guild {interaction.guild_id}")
+                logger.info(
+                    f"User {user.id} unverified by admin {interaction.user.id} in guild {interaction.guild_id}"
+                )
 
                 # Try to remove verified role from guild config
                 try:
                     role = interaction.guild.get_role(guild_config.verified_role_id)
                     if role and role in user.roles:
-                        await user.remove_roles(role, reason=f"Unverified by {interaction.user}")
+                        await user.remove_roles(
+                            role, reason=f"Unverified by {interaction.user}"
+                        )
                 except discord.Forbidden:
                     logger.warning(f"No permission to remove role from user {user.id}")
                 except Exception as e:
@@ -231,7 +247,9 @@ def setup_commands(bot: commands.Bot) -> None:
 
         try:
             # Ensure we're in a guild
-            if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            if not interaction.guild or not isinstance(
+                interaction.user, discord.Member
+            ):
                 await interaction.followup.send(
                     "❌ This command can only be used in a server.",
                     ephemeral=True,
@@ -262,10 +280,16 @@ def setup_commands(bot: commands.Bot) -> None:
 
             # Get all verifications for this guild only (filter by members in this guild)
             async with get_db_session() as db_session:
-                all_verifications = await verification_service.get_all_verifications(db_session)
+                all_verifications = await verification_service.get_all_verifications(
+                    db_session
+                )
 
             # Filter to only members of this guild
-            verifications = [v for v in all_verifications if interaction.guild.get_member(v.discord_user_id)]
+            verifications = [
+                v
+                for v in all_verifications
+                if interaction.guild.get_member(v.discord_user_id)
+            ]
 
             if not verifications:
                 await interaction.followup.send(
@@ -282,8 +306,14 @@ def setup_commands(bot: commands.Bot) -> None:
 
             # Add up to 25 fields (Discord limit)
             for verification in verifications[:25]:
-                discord_user = interaction.guild.get_member(verification.discord_user_id)
-                discord_mention = discord_user.mention if discord_user else f"<@{verification.discord_user_id}>"
+                discord_user = interaction.guild.get_member(
+                    verification.discord_user_id
+                )
+                discord_mention = (
+                    discord_user.mention
+                    if discord_user
+                    else f"<@{verification.discord_user_id}>"
+                )
 
                 embed.add_field(
                     name=f"Twitch: {verification.twitch_username}",
@@ -292,10 +322,14 @@ def setup_commands(bot: commands.Bot) -> None:
                 )
 
             if len(verifications) > 25:
-                embed.set_footer(text=f"Showing first 25 of {len(verifications)} verified users")
+                embed.set_footer(
+                    text=f"Showing first 25 of {len(verifications)} verified users"
+                )
 
             await interaction.followup.send(embed=embed, ephemeral=True)
-            logger.info(f"List verified command executed by admin {interaction.user.id}")
+            logger.info(
+                f"List verified command executed by admin {interaction.user.id}"
+            )
 
         except Exception as e:
             logger.error(f"Error in list-verified command: {e}", exc_info=True)
@@ -326,7 +360,9 @@ def setup_commands(bot: commands.Bot) -> None:
 
         try:
             # Ensure we're in a guild
-            if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            if not interaction.guild or not isinstance(
+                interaction.user, discord.Member
+            ):
                 await interaction.followup.send(
                     "❌ This command can only be used in a server.",
                     ephemeral=True,
@@ -358,7 +394,11 @@ def setup_commands(bot: commands.Bot) -> None:
                 return
 
             # If no parameters provided, show current config
-            if verified_role is None and admin_roles is None and nickname_enforcement is None:
+            if (
+                verified_role is None
+                and admin_roles is None
+                and nickname_enforcement is None
+            ):
                 embed = discord.Embed(
                     title="⚙️ Server Configuration",
                     description=f"Configuration for **{guild.name}**",
@@ -373,20 +413,25 @@ def setup_commands(bot: commands.Bot) -> None:
 
                 embed.add_field(
                     name="Admin Roles",
-                    value=guild_config.admin_role_ids or "None (owner & administrators only)",
+                    value=guild_config.admin_role_ids
+                    or "None (owner & administrators only)",
                     inline=False,
                 )
 
                 embed.add_field(
                     name="Nickname Enforcement",
-                    value="✅ Enabled" if guild_config.nickname_enforcement_enabled else "❌ Disabled",
+                    value=(
+                        "✅ Enabled"
+                        if guild_config.nickname_enforcement_enabled
+                        else "❌ Disabled"
+                    ),
                     inline=False,
                 )
 
                 embed.add_field(
                     name="Setup Info",
                     value=f"Configured by: <@{guild_config.setup_by_user_id}>\n"
-                          f"Setup at: <t:{int(guild_config.created_at.timestamp())}:F>",
+                    f"Setup at: <t:{int(guild_config.created_at.timestamp())}:F>",
                     inline=False,
                 )
 
@@ -405,9 +450,12 @@ def setup_commands(bot: commands.Bot) -> None:
 
                 if admin_roles is not None:
                     import re
-                    role_ids = re.findall(r'<@&(\d+)>|(\d+)', admin_roles)
+
+                    role_ids = re.findall(r"<@&(\d+)>|(\d+)", admin_roles)
                     role_ids = [r[0] or r[1] for r in role_ids]
-                    update_kwargs["admin_role_ids"] = ",".join(role_ids) if role_ids else None
+                    update_kwargs["admin_role_ids"] = (
+                        ",".join(role_ids) if role_ids else None
+                    )
 
                 if nickname_enforcement is not None:
                     update_kwargs["nickname_enforcement_enabled"] = nickname_enforcement
@@ -424,9 +472,13 @@ def setup_commands(bot: commands.Bot) -> None:
             if verified_role:
                 changes.append(f"• Verified Role → {verified_role.mention}")
             if admin_roles is not None:
-                changes.append(f"• Admin Roles → {admin_roles or 'None (owner & administrators only)'}")
+                changes.append(
+                    f"• Admin Roles → {admin_roles or 'None (owner & administrators only)'}"
+                )
             if nickname_enforcement is not None:
-                changes.append(f"• Nickname Enforcement → {'✅ Enabled' if nickname_enforcement else '❌ Disabled'}")
+                changes.append(
+                    f"• Nickname Enforcement → {'✅ Enabled' if nickname_enforcement else '❌ Disabled'}"
+                )
 
             embed = discord.Embed(
                 title="✅ Configuration Updated",
@@ -503,7 +555,9 @@ def setup_commands(bot: commands.Bot) -> None:
                 inline=False,
             )
 
-            embed.set_footer(text="Your Twitch username will become your nickname in this server")
+            embed.set_footer(
+                text="Your Twitch username will become your nickname in this server"
+            )
 
             await interaction.response.send_message(embed=embed, ephemeral=True)
             logger.info(f"Verify command executed by user {interaction.user.id}")
@@ -541,7 +595,11 @@ async def is_admin(interaction: discord.Interaction) -> bool:
             return False
 
         # Parse admin role IDs from config
-        admin_role_ids = [int(rid.strip()) for rid in guild_config.admin_role_ids.split(",") if rid.strip()]
+        admin_role_ids = [
+            int(rid.strip())
+            for rid in guild_config.admin_role_ids.split(",")
+            if rid.strip()
+        ]
         user_role_ids = [role.id for role in interaction.user.roles]
 
         return any(role_id in admin_role_ids for role_id in user_role_ids)

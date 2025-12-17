@@ -64,10 +64,14 @@ class OAuthService:
 
         if oauth_session is None:
             logger.warning(f"Invalid token: {token[:8]}...")
-            raise InvalidTokenError(f"Token not found: {token[:8]}...", ERROR_TOKEN_INVALID)
+            raise InvalidTokenError(
+                f"Token not found: {token[:8]}...", ERROR_TOKEN_INVALID
+            )
 
         if oauth_session.expires_at < datetime.utcnow():
-            logger.warning(f"Expired token: {token[:8]}..., expired at {oauth_session.expires_at}")
+            logger.warning(
+                f"Expired token: {token[:8]}..., expired at {oauth_session.expires_at}"
+            )
             raise TokenExpiredError(
                 f"Token expired: {token[:8]}..., expired at {oauth_session.expires_at}",
                 ERROR_TOKEN_EXPIRED,
@@ -94,7 +98,9 @@ class OAuthService:
             token=token,
             discord_oauth_verified_id=discord_user_id,
         )
-        logger.info(f"Discord OAuth completed for token {token[:8]}..., user {discord_user_id}")
+        logger.info(
+            f"Discord OAuth completed for token {token[:8]}..., user {discord_user_id}"
+        )
 
     @staticmethod
     async def complete_twitch_oauth(
@@ -118,7 +124,9 @@ class OAuthService:
             twitch_user_id=twitch_user_id,
             twitch_username=twitch_username,
         )
-        logger.info(f"Twitch OAuth completed for token {token[:8]}..., user {twitch_username}")
+        logger.info(
+            f"Twitch OAuth completed for token {token[:8]}..., user {twitch_username}"
+        )
 
     @staticmethod
     async def validate_discord_oauth_completed(

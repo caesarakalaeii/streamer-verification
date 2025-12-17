@@ -41,6 +41,9 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      - name: Run black formatter check
+        run: black --check src/
+
       - name: Run ruff linter
         run: ruff check src/
 

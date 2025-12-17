@@ -9,7 +9,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import config
-from src.database.models import GuildConfig, OAuthSession, UserVerification, VerificationAuditLog
+from src.database.models import (
+    GuildConfig,
+    OAuthSession,
+    UserVerification,
+    VerificationAuditLog,
+)
 from src.shared.exceptions import RecordAlreadyExistsError
 
 logger = logging.getLogger(__name__)
@@ -37,29 +42,39 @@ class UserVerificationRepository:
         session.add(verification)
         try:
             await session.flush()
-            logger.info(f"Created verification for Discord user {discord_user_id} → Twitch user {twitch_username}")
+            logger.info(
+                f"Created verification for Discord user {discord_user_id} → Twitch user {twitch_username}"
+            )
             return verification
         except IntegrityError as e:
             await session.rollback()
             logger.error(f"Integrity error creating verification: {e}")
             raise RecordAlreadyExistsError(
                 "User verification already exists",
-                "This Discord or Twitch account is already linked."
+                "This Discord or Twitch account is already linked.",
             ) from e
 
     @staticmethod
-    async def get_by_discord_id(session: AsyncSession, discord_user_id: int) -> UserVerification | None:
+    async def get_by_discord_id(
+        session: AsyncSession, discord_user_id: int
+    ) -> UserVerification | None:
         """Get verification by Discord user ID."""
         result = await session.execute(
-            select(UserVerification).where(UserVerification.discord_user_id == discord_user_id)
+            select(UserVerification).where(
+                UserVerification.discord_user_id == discord_user_id
+            )
         )
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_by_twitch_id(session: AsyncSession, twitch_user_id: str) -> UserVerification | None:
+    async def get_by_twitch_id(
+        session: AsyncSession, twitch_user_id: str
+    ) -> UserVerification | None:
         """Get verification by Twitch user ID."""
         result = await session.execute(
-            select(UserVerification).where(UserVerification.twitch_user_id == twitch_user_id)
+            select(UserVerification).where(
+                UserVerification.twitch_user_id == twitch_user_id
+            )
         )
         return result.scalar_one_or_none()
 
@@ -70,7 +85,9 @@ class UserVerificationRepository:
         return result.scalars().all()
 
     @staticmethod
-    async def update_nickname_check(session: AsyncSession, verification_id: int) -> None:
+    async def update_nickname_check(
+        session: AsyncSession, verification_id: int
+    ) -> None:
         """Update last nickname check timestamp."""
         await session.execute(
             update(UserVerification)
@@ -80,12 +97,17 @@ class UserVerificationRepository:
         await session.flush()
 
     @staticmethod
-    async def update_nickname_update(session: AsyncSession, verification_id: int) -> None:
+    async def update_nickname_update(
+        session: AsyncSession, verification_id: int
+    ) -> None:
         """Update last nickname update timestamp."""
         await session.execute(
             update(UserVerification)
             .where(UserVerification.id == verification_id)
-            .values(last_nickname_update=datetime.utcnow(), last_nickname_check=datetime.utcnow())
+            .values(
+                last_nickname_update=datetime.utcnow(),
+                last_nickname_check=datetime.utcnow(),
+            )
         )
         await session.flush()
 
@@ -93,7 +115,9 @@ class UserVerificationRepository:
     async def delete_by_discord_id(session: AsyncSession, discord_user_id: int) -> bool:
         """Delete verification by Discord user ID. Returns True if deleted, False if not found."""
         result = await session.execute(
-            delete(UserVerification).where(UserVerification.discord_user_id == discord_user_id)
+            delete(UserVerification).where(
+                UserVerification.discord_user_id == discord_user_id
+            )
         )
         await session.flush()
         deleted = result.rowcount > 0
@@ -110,7 +134,9 @@ class UserVerificationRepository:
         twitch_display_name: str | None = None,
     ) -> UserVerification:
         """Create or update verification. Returns the verification record."""
-        existing = await UserVerificationRepository.get_by_discord_id(session, discord_user_id)
+        existing = await UserVerificationRepository.get_by_discord_id(
+            session, discord_user_id
+        )
         if existing:
             # Update existing
             existing.twitch_user_id = twitch_user_id
@@ -123,7 +149,11 @@ class UserVerificationRepository:
         else:
             # Create new
             return await UserVerificationRepository.create(
-                session, discord_user_id, twitch_user_id, twitch_username, twitch_display_name
+                session,
+                discord_user_id,
+                twitch_user_id,
+                twitch_username,
+                twitch_display_name,
             )
 
 
@@ -139,7 +169,9 @@ class OAuthSessionRepository:
         discord_guild_id: int,
     ) -> OAuthSession:
         """Create a new OAuth session."""
-        expires_at = datetime.utcnow() + timedelta(minutes=config.oauth_token_expiry_minutes)
+        expires_at = datetime.utcnow() + timedelta(
+            minutes=config.oauth_token_expiry_minutes
+        )
         oauth_session = OAuthSession(
             token=token,
             discord_user_id=discord_user_id,
@@ -149,13 +181,17 @@ class OAuthSessionRepository:
         )
         session.add(oauth_session)
         await session.flush()
-        logger.info(f"Created OAuth session for Discord user {discord_user_id}, token={token[:8]}...")
+        logger.info(
+            f"Created OAuth session for Discord user {discord_user_id}, token={token[:8]}..."
+        )
         return oauth_session
 
     @staticmethod
     async def get_by_token(session: AsyncSession, token: str) -> OAuthSession | None:
         """Get OAuth session by token."""
-        result = await session.execute(select(OAuthSession).where(OAuthSession.token == token))
+        result = await session.execute(
+            select(OAuthSession).where(OAuthSession.token == token)
+        )
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -314,11 +350,13 @@ class GuildConfigRepository:
             logger.error(f"Integrity error creating guild config: {e}")
             raise RecordAlreadyExistsError(
                 "Guild configuration already exists",
-                "This server has already been set up."
+                "This server has already been set up.",
             ) from e
 
     @staticmethod
-    async def get_by_guild_id(session: AsyncSession, guild_id: int) -> GuildConfig | None:
+    async def get_by_guild_id(
+        session: AsyncSession, guild_id: int
+    ) -> GuildConfig | None:
         """Get guild configuration by guild ID."""
         result = await session.execute(
             select(GuildConfig).where(GuildConfig.guild_id == guild_id)
@@ -333,9 +371,7 @@ class GuildConfigRepository:
 
     @staticmethod
     async def update(
-        session: AsyncSession,
-        guild_id: int,
-        **kwargs
+        session: AsyncSession, guild_id: int, **kwargs
     ) -> GuildConfig | None:
         """Update guild configuration."""
         guild_config = await GuildConfigRepository.get_by_guild_id(session, guild_id)

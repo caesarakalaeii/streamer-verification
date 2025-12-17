@@ -45,19 +45,27 @@ def setup_tasks(bot: commands.Bot) -> None:
 
             # Get all verified users
             async with get_db_session() as db_session:
-                verifications = await verification_service.get_all_verifications(db_session)
+                verifications = await verification_service.get_all_verifications(
+                    db_session
+                )
 
-            logger.debug(f"Checking nicknames for {len(verifications)} verified users across {len(guild_configs)} guilds")
+            logger.debug(
+                f"Checking nicknames for {len(verifications)} verified users across {len(guild_configs)} guilds"
+            )
 
             # Process each guild
             for guild_config in guild_configs:
                 if not guild_config.nickname_enforcement_enabled:
-                    logger.debug(f"Nickname enforcement disabled for guild {guild_config.guild_id}, skipping")
+                    logger.debug(
+                        f"Nickname enforcement disabled for guild {guild_config.guild_id}, skipping"
+                    )
                     continue
 
                 guild = bot.get_guild(guild_config.guild_id)
                 if not guild:
-                    logger.warning(f"Guild {guild_config.guild_id} not found (bot may have been removed)")
+                    logger.warning(
+                        f"Guild {guild_config.guild_id} not found (bot may have been removed)"
+                    )
                     continue
 
                 # Check each verification for members in this guild
@@ -68,13 +76,19 @@ def setup_tasks(bot: commands.Bot) -> None:
                             continue  # User not in this guild
 
                         # Determine target nickname
-                        target_nickname = verification.twitch_display_name or verification.twitch_username
+                        target_nickname = (
+                            verification.twitch_display_name
+                            or verification.twitch_username
+                        )
 
                         # Check if nickname needs update
                         if member.nick != target_nickname:
                             if not config.dry_run_mode:
                                 try:
-                                    await member.edit(nick=target_nickname, reason="Twitch verification enforcement")
+                                    await member.edit(
+                                        nick=target_nickname,
+                                        reason="Twitch verification enforcement",
+                                    )
 
                                     # Update database
                                     async with get_db_session() as db_session:
@@ -91,13 +105,21 @@ def setup_tasks(bot: commands.Bot) -> None:
                                             action=AUDIT_ACTION_NICKNAME_UPDATED,
                                         )
 
-                                    logger.info(f"Updated nickname for {member.id} to {target_nickname} in guild {guild.id}")
+                                    logger.info(
+                                        f"Updated nickname for {member.id} to {target_nickname} in guild {guild.id}"
+                                    )
                                 except discord.Forbidden:
-                                    logger.warning(f"No permission to update nickname for {member.id} in guild {guild.id}")
+                                    logger.warning(
+                                        f"No permission to update nickname for {member.id} in guild {guild.id}"
+                                    )
                                 except discord.HTTPException as e:
-                                    logger.error(f"Failed to update nickname for {member.id} in guild {guild.id}: {e}")
+                                    logger.error(
+                                        f"Failed to update nickname for {member.id} in guild {guild.id}: {e}"
+                                    )
                             else:
-                                logger.info(f"[DRY RUN] Would update nickname for {member.id} to {target_nickname} in guild {guild.id}")
+                                logger.info(
+                                    f"[DRY RUN] Would update nickname for {member.id} to {target_nickname} in guild {guild.id}"
+                                )
                         else:
                             # Nickname is correct, just update check timestamp
                             async with get_db_session() as db_session:
@@ -107,7 +129,10 @@ def setup_tasks(bot: commands.Bot) -> None:
                                 )
 
                     except Exception as e:
-                        logger.error(f"Error enforcing nickname for {verification.discord_user_id} in guild {guild.id}: {e}", exc_info=True)
+                        logger.error(
+                            f"Error enforcing nickname for {verification.discord_user_id} in guild {guild.id}: {e}",
+                            exc_info=True,
+                        )
 
         except Exception as e:
             logger.error(f"Error in nickname enforcement task: {e}", exc_info=True)
@@ -121,7 +146,9 @@ def setup_tasks(bot: commands.Bot) -> None:
         """
         try:
             async with get_db_session() as db_session:
-                deleted_count = await OAuthSessionRepository.cleanup_expired_sessions(db_session)
+                deleted_count = await OAuthSessionRepository.cleanup_expired_sessions(
+                    db_session
+                )
 
             if deleted_count > 0:
                 logger.info(f"Cleaned up {deleted_count} expired OAuth sessions")

@@ -32,6 +32,7 @@ async def run_bot():
 
     # Set global bot instance for cross-module access
     from src.bot.bot_instance import set_bot_instance
+
     set_bot_instance(bot)
 
     try:
@@ -86,6 +87,7 @@ async def main():
         # Register Discord Linked Roles metadata
         logger.info("Registering Discord Linked Roles metadata...")
         from src.services.discord_service import discord_service
+
         await discord_service.register_metadata()
         logger.info("Discord metadata registered successfully")
 
@@ -96,8 +98,7 @@ async def main():
 
         # Wait for shutdown signal or either task to complete
         done, pending = await asyncio.wait(
-            [bot_task, web_task],
-            return_when=asyncio.FIRST_COMPLETED
+            [bot_task, web_task], return_when=asyncio.FIRST_COMPLETED
         )
 
         logger.info("Shutdown initiated, stopping services...")

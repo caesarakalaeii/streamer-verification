@@ -22,6 +22,7 @@ def create_app() -> FastAPI:
 
     # Import and include routers
     from src.web.routes import router
+
     app.include_router(router)
 
     @app.get("/health", response_class=HTMLResponse)
