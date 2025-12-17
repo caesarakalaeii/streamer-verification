@@ -37,8 +37,10 @@ ENV PATH=/root/.local/bin:$PATH
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Create log directory
-RUN mkdir -p /var/log/bot
+# Create log directory and fix permissions for non-root user
+RUN mkdir -p /var/log/bot && \
+    chmod -R 755 /root/.local && \
+    chmod 755 /root
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
