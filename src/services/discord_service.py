@@ -270,6 +270,62 @@ class DiscordService:
                 "Failed to connect to Discord. Please try again.",
             ) from e
 
+    @staticmethod
+    async def clear_role_connection_metadata(access_token: str) -> None:
+        """
+        Clear role connection metadata for a user by setting verified status to false.
+
+        This prevents Discord from automatically re-assigning the role when the
+        user has been unverified.
+
+        Args:
+            access_token: Discord user access token (with role_connections.write scope)
+
+        Raises:
+            DiscordAPIError: Failed to clear metadata
+        """
+        url = f"{DISCORD_API_BASE}/users/@me/applications/{config.discord_oauth_client_id}/role-connection"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "platform_name": None,
+            "platform_username": None,
+            "metadata": {
+                "verified_on_twitch": 0,  # Boolean false
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.put(
+                    url,
+                    headers=headers,
+                    json=payload,
+                    timeout=10.0,
+                )
+
+                if response.status_code not in (200, 201):
+                    error_data = response.json() if response.content else {}
+                    logger.error(
+                        f"Failed to clear role connection: {response.status_code}, {error_data}"
+                    )
+                    raise DiscordAPIError(
+                        f"Failed to clear role connection: {response.status_code}",
+                        "Failed to update your Discord profile. Please try again.",
+                    )
+
+                logger.info("Successfully cleared role connection metadata")
+
+        except httpx.RequestError as e:
+            logger.error(f"Discord API request error: {e}")
+            raise DiscordAPIError(
+                f"Discord API request failed: {e}",
+                "Failed to connect to Discord. Please try again.",
+            ) from e
+
 
 # Global instance
 discord_service = DiscordService()

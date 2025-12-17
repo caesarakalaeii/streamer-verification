@@ -18,6 +18,9 @@ from src.shared.constants import AUDIT_ACTION_NICKNAME_UPDATED
 
 logger = logging.getLogger(__name__)
 
+# Track users we've already DM'd to avoid spam
+_dm_sent_users: set[int] = set()
+
 
 def setup_tasks(bot: commands.Bot) -> None:
     """Register periodic tasks."""
@@ -156,6 +159,137 @@ def setup_tasks(bot: commands.Bot) -> None:
         except Exception as e:
             logger.error(f"Error in session cleanup task: {e}", exc_info=True)
 
+    @tasks.loop(minutes=10)
+    async def check_role_verification_mismatch():
+        """
+        Periodically check for users who have the verified role but aren't in the database.
+
+        This catches cases where:
+        - User was unverified but Discord Linked Roles auto-reassigned the role
+        - User manually got the role without verification
+        - Database and Discord roles are out of sync
+
+        For these users, we remove the role and send a DM with verification instructions.
+        """
+        try:
+            # Get all guild configurations
+            async with get_db_session() as db_session:
+                guild_configs = await GuildConfigRepository.get_all(db_session)
+
+            if not guild_configs:
+                logger.debug(
+                    "No guilds configured yet, skipping role verification mismatch check"
+                )
+                return
+
+            # Get all verified users from database
+            async with get_db_session() as db_session:
+                verifications = await verification_service.get_all_verifications(
+                    db_session
+                )
+
+            verified_user_ids = {v.discord_user_id for v in verifications}
+
+            logger.debug(
+                f"Checking role/verification mismatches in {len(guild_configs)} guilds"
+            )
+
+            # Process each guild
+            for guild_config in guild_configs:
+                guild = bot.get_guild(guild_config.guild_id)
+                if not guild:
+                    logger.warning(
+                        f"Guild {guild_config.guild_id} not found (bot may have been removed)"
+                    )
+                    continue
+
+                role = guild.get_role(guild_config.verified_role_id)
+                if not role:
+                    logger.warning(
+                        f"Verified role {guild_config.verified_role_id} not found in guild {guild.id}"
+                    )
+                    continue
+
+                # Check all members with the verified role
+                for member in role.members:
+                    # Skip if user is actually verified
+                    if member.id in verified_user_ids:
+                        continue
+
+                    # User has role but no verification record!
+                    logger.warning(
+                        f"User {member.id} has verified role in guild {guild.id} but no verification record"
+                    )
+
+                    try:
+                        # Remove the role
+                        await member.remove_roles(
+                            role,
+                            reason="Not verified - role/database mismatch detected",
+                        )
+                        logger.info(
+                            f"Removed verified role from {member.id} in guild {guild.id} (not verified)"
+                        )
+
+                        # Send DM with verification instructions (once per user, not per guild)
+                        if member.id not in _dm_sent_users:
+                            try:
+                                embed = discord.Embed(
+                                    title="🔒 Verification Required",
+                                    description=f"Your verified role was removed in **{guild.name}** because you're not currently verified.",
+                                    color=discord.Color.orange(),
+                                )
+
+                                embed.add_field(
+                                    name="Why did this happen?",
+                                    value="You need to link your Twitch account through Discord's Connections to get verified.",
+                                    inline=False,
+                                )
+
+                                embed.add_field(
+                                    name="How to verify:",
+                                    value=(
+                                        "1. Go to **Discord Settings** → **Connections**\n"
+                                        "2. Find and click **Link** on the verification app\n"
+                                        "3. Authenticate with Twitch\n"
+                                        "4. Your role will be automatically assigned!"
+                                    ),
+                                    inline=False,
+                                )
+
+                                embed.set_footer(
+                                    text=f"Server: {guild.name} • Verification is required"
+                                )
+
+                                await member.send(embed=embed)
+                                _dm_sent_users.add(member.id)
+                                logger.info(
+                                    f"Sent verification instructions DM to user {member.id}"
+                                )
+
+                            except discord.Forbidden:
+                                logger.warning(
+                                    f"Cannot send DM to user {member.id} (DMs disabled)"
+                                )
+                            except discord.HTTPException as e:
+                                logger.error(
+                                    f"Failed to send DM to user {member.id}: {e}"
+                                )
+
+                    except discord.Forbidden:
+                        logger.warning(
+                            f"No permission to remove role from user {member.id} in guild {guild.id}"
+                        )
+                    except discord.HTTPException as e:
+                        logger.error(
+                            f"Failed to remove role from user {member.id} in guild {guild.id}: {e}"
+                        )
+
+        except Exception as e:
+            logger.error(
+                f"Error in role verification mismatch check: {e}", exc_info=True
+            )
+
     @enforce_nicknames.before_loop
     async def before_enforce_nicknames():
         """Wait until bot is ready before starting nickname enforcement task."""
@@ -168,8 +302,15 @@ def setup_tasks(bot: commands.Bot) -> None:
         await bot.wait_until_ready()
         logger.info("Starting session cleanup task")
 
+    @check_role_verification_mismatch.before_loop
+    async def before_check_role_verification_mismatch():
+        """Wait until bot is ready before starting role verification mismatch check."""
+        await bot.wait_until_ready()
+        logger.info("Starting role verification mismatch check task")
+
     # Start tasks
     enforce_nicknames.start()
     cleanup_expired_sessions.start()
+    check_role_verification_mismatch.start()
 
     logger.info("Periodic tasks registered and started")
