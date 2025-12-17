@@ -328,8 +328,8 @@ def setup_commands(bot: commands.Bot) -> None:
             user_text = "\n".join(user_list)
             if len(user_text) > 4000:
                 # Split into chunks
-                chunks = []
-                current_chunk = []
+                chunks: list[str] = []
+                current_chunk: list[str] = []
                 current_length = 0
 
                 for line in user_list:
