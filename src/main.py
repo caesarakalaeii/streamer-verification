@@ -29,6 +29,11 @@ def signal_handler(signum, frame):
 async def run_bot():
     """Run the Discord bot."""
     bot = create_bot()
+
+    # Set global bot instance for cross-module access
+    from src.bot.bot_instance import set_bot_instance
+    set_bot_instance(bot)
+
     try:
         logger.info("Starting Discord bot...")
         await bot.start(config.discord_bot_token)

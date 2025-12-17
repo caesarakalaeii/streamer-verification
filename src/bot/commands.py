@@ -22,7 +22,7 @@ def setup_commands(bot: commands.Bot) -> None:
         description="[Owner] Set up the bot for this server",
     )
     @app_commands.describe(
-        verified_role="The role to assign to verified users",
+        verified_role="The role to automatically assign when users verify their Twitch account",
         admin_roles="Optional: Roles that can use admin commands (comma-separated mentions or IDs)"
     )
     async def setup(
@@ -113,17 +113,17 @@ def setup_commands(bot: commands.Bot) -> None:
             embed.add_field(
                 name="Next Steps",
                 value=(
-                    "1. **Create a Discord role** with a Linked Role requirement:\n"
-                    "   • Edit your role → **Links** tab\n"
-                    "   • Add requirement: This app → **Verified on Twitch** = ✅\n\n"
-                    "2. **Tell your users** to verify:\n"
-                    "   • Go to Discord Settings → Connections\n"
-                    "   • Click **Link** on this app\n"
-                    "   • Authenticate with Twitch\n\n"
-                    "3. **Use admin commands**:\n"
-                    "   • `/config` - View or update settings\n"
-                    "   • `/unverify` - Remove user verification\n"
-                    "   • `/list-verified` - Show all verified users"
+                    "**Tell your users to verify:**\n"
+                    "Users can run `/verify` to get instructions, or they can:\n"
+                    "1. Go to Discord Settings → Connections\n"
+                    "2. Click **Link** on this app\n"
+                    "3. Authenticate with Twitch\n"
+                    "4. Their role and nickname will be automatically assigned!\n\n"
+                    "**Admin commands:**\n"
+                    "• `/config` - View or update server settings\n"
+                    "• `/verify` - Show verification instructions\n"
+                    "• `/unverify` - Remove user verification\n"
+                    "• `/list-verified` - Show all verified users"
                 ),
                 inline=False,
             )
@@ -301,6 +301,217 @@ def setup_commands(bot: commands.Bot) -> None:
             logger.error(f"Error in list-verified command: {e}", exc_info=True)
             await interaction.followup.send(
                 "❌ An error occurred while fetching verified users. Please try again later.",
+                ephemeral=True,
+            )
+
+    @bot.tree.command(
+        name="config",
+        description="[Admin] View or update server configuration",
+    )
+    @app_commands.describe(
+        verified_role="Optional: Update the verified role",
+        admin_roles="Optional: Update admin roles (comma-separated mentions or IDs)",
+        nickname_enforcement="Optional: Enable or disable nickname enforcement",
+    )
+    async def config(
+        interaction: discord.Interaction,
+        verified_role: discord.Role | None = None,
+        admin_roles: str | None = None,
+        nickname_enforcement: bool | None = None,
+    ):
+        """
+        Config command: View or update guild configuration (admin only).
+        """
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # Ensure we're in a guild
+            if not interaction.guild or not isinstance(interaction.user, discord.Member):
+                await interaction.followup.send(
+                    "❌ This command can only be used in a server.",
+                    ephemeral=True,
+                )
+                return
+
+            guild = interaction.guild
+
+            # Check if guild is configured
+            async with get_db_session() as db_session:
+                guild_config = await GuildConfigRepository.get_by_guild_id(
+                    db_session,
+                    guild.id,
+                )
+
+            if not guild_config:
+                await interaction.followup.send(
+                    "❌ This server hasn't been set up yet. Run `/setup` first.",
+                    ephemeral=True,
+                )
+                return
+
+            # Check if user is admin
+            if not await is_admin(interaction):
+                await interaction.followup.send(
+                    "❌ You don't have permission to use this command.",
+                    ephemeral=True,
+                )
+                return
+
+            # If no parameters provided, show current config
+            if verified_role is None and admin_roles is None and nickname_enforcement is None:
+                embed = discord.Embed(
+                    title="⚙️ Server Configuration",
+                    description=f"Configuration for **{guild.name}**",
+                    color=discord.Color.blue(),
+                )
+
+                embed.add_field(
+                    name="Verified Role",
+                    value=f"<@&{guild_config.verified_role_id}>",
+                    inline=False,
+                )
+
+                embed.add_field(
+                    name="Admin Roles",
+                    value=guild_config.admin_role_ids or "None (owner & administrators only)",
+                    inline=False,
+                )
+
+                embed.add_field(
+                    name="Nickname Enforcement",
+                    value="✅ Enabled" if guild_config.nickname_enforcement_enabled else "❌ Disabled",
+                    inline=False,
+                )
+
+                embed.add_field(
+                    name="Setup Info",
+                    value=f"Configured by: <@{guild_config.setup_by_user_id}>\n"
+                          f"Setup at: <t:{int(guild_config.created_at.timestamp())}:F>",
+                    inline=False,
+                )
+
+                embed.set_footer(text="Use /config with parameters to update settings")
+
+                await interaction.followup.send(embed=embed, ephemeral=True)
+                return
+
+            # Update configuration
+            async with get_db_session() as db_session:
+                # Parse admin role IDs if provided
+                update_kwargs = {}
+
+                if verified_role is not None:
+                    update_kwargs["verified_role_id"] = verified_role.id
+
+                if admin_roles is not None:
+                    import re
+                    role_ids = re.findall(r'<@&(\d+)>|(\d+)', admin_roles)
+                    role_ids = [r[0] or r[1] for r in role_ids]
+                    update_kwargs["admin_role_ids"] = ",".join(role_ids) if role_ids else None
+
+                if nickname_enforcement is not None:
+                    update_kwargs["nickname_enforcement_enabled"] = nickname_enforcement
+
+                # Update guild config
+                await GuildConfigRepository.update(
+                    db_session,
+                    guild_id=guild.id,
+                    **update_kwargs,
+                )
+
+            # Build response message
+            changes = []
+            if verified_role:
+                changes.append(f"• Verified Role → {verified_role.mention}")
+            if admin_roles is not None:
+                changes.append(f"• Admin Roles → {admin_roles or 'None (owner & administrators only)'}")
+            if nickname_enforcement is not None:
+                changes.append(f"• Nickname Enforcement → {'✅ Enabled' if nickname_enforcement else '❌ Disabled'}")
+
+            embed = discord.Embed(
+                title="✅ Configuration Updated",
+                description="The following settings have been updated:",
+                color=discord.Color.green(),
+            )
+
+            embed.add_field(
+                name="Changes",
+                value="\n".join(changes),
+                inline=False,
+            )
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            logger.info(
+                f"Guild {guild.id} ({guild.name}) configuration updated by {interaction.user.id}: {changes}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error in config command: {e}", exc_info=True)
+            await interaction.followup.send(
+                "❌ An error occurred while updating configuration. Please try again later.",
+                ephemeral=True,
+            )
+
+    @bot.tree.command(
+        name="verify",
+        description="Get instructions on how to verify your Twitch account",
+    )
+    async def verify(interaction: discord.Interaction):
+        """
+        Verify command: Guide users through the verification process.
+        """
+        try:
+            embed = discord.Embed(
+                title="🎮 Verify Your Twitch Account",
+                description="Follow these steps to link your Twitch account and get verified:",
+                color=discord.Color.purple(),
+            )
+
+            embed.add_field(
+                name="Step 1: Open Discord Settings",
+                value="Click the ⚙️ (Settings) icon at the bottom left of Discord",
+                inline=False,
+            )
+
+            embed.add_field(
+                name="Step 2: Go to Connections",
+                value="Find **Connections** in the left sidebar under 'User Settings'",
+                inline=False,
+            )
+
+            embed.add_field(
+                name="Step 3: Find This App",
+                value=f"Look for **{interaction.client.user.name}** in the list of available connections",
+                inline=False,
+            )
+
+            embed.add_field(
+                name="Step 4: Click 'Link'",
+                value="Click the **Link** button next to this app",
+                inline=False,
+            )
+
+            embed.add_field(
+                name="Step 5: Authenticate with Twitch",
+                value="You'll be redirected to authenticate with Twitch. Sign in and authorize the connection.",
+                inline=False,
+            )
+
+            embed.add_field(
+                name="✅ That's it!",
+                value="Once completed, your verified role and nickname will be automatically assigned!",
+                inline=False,
+            )
+
+            embed.set_footer(text="Your Twitch username will become your nickname in this server")
+
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            logger.info(f"Verify command executed by user {interaction.user.id}")
+
+        except Exception as e:
+            logger.error(f"Error in verify command: {e}", exc_info=True)
+            await interaction.response.send_message(
+                "❌ An error occurred. Please try again later.",
                 ephemeral=True,
             )
 

@@ -313,6 +313,20 @@ async def twitch_oauth_callback(
 
         logger.info(f"✅ Linked role verification completed: Discord {discord_user_id} → Twitch {twitch_username}")
 
+        # Immediately assign role and set nickname in all configured guilds
+        try:
+            from src.services.post_verification_service import post_verification_service
+            async with get_db_session() as db_session:
+                await post_verification_service.assign_role_and_nickname(
+                    db_session,
+                    discord_user_id=discord_user_id,
+                    twitch_username=twitch_username,
+                    twitch_display_name=twitch_display_name,
+                )
+        except Exception as e:
+            # Log error but don't fail the verification flow
+            logger.error(f"Failed to assign role/nickname immediately: {e}", exc_info=True)
+
         return render_html_page(
             "Verification Complete!",
             SUCCESS_VERIFICATION_COMPLETE.format(twitch_username=twitch_username),
