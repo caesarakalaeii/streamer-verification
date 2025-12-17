@@ -443,7 +443,9 @@ def setup_commands(bot: commands.Bot) -> None:
             # Update configuration
             async with get_db_session() as db_session:
                 # Parse admin role IDs if provided
-                update_kwargs = {}
+                from typing import Any
+
+                update_kwargs: dict[str, Any] = {}
 
                 if verified_role is not None:
                     update_kwargs["verified_role_id"] = verified_role.id
