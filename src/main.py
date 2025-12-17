@@ -5,7 +5,8 @@ import logging
 import signal
 import sys
 
-import uvicorn
+from hypercorn.asyncio import serve
+from hypercorn.config import Config as HypercornConfig
 
 from src.bot.client import create_bot
 from src.config import config
@@ -44,19 +45,14 @@ async def run_web_server():
     """Run the FastAPI web server."""
     app = create_app()
 
-    uvicorn_config = uvicorn.Config(
-        app=app,
-        host=config.web_host,
-        port=config.web_port,
-        log_level=config.log_level.lower(),
-        access_log=config.debug_mode,
-    )
-
-    server = uvicorn.Server(uvicorn_config)
+    hypercorn_config = HypercornConfig()
+    hypercorn_config.bind = [f"{config.web_host}:{config.web_port}"]
+    hypercorn_config.loglevel = config.log_level.lower()
+    hypercorn_config.accesslog = "-" if config.debug_mode else None
 
     try:
         logger.info(f"Starting web server on {config.web_host}:{config.web_port}...")
-        await server.serve()
+        await serve(app, hypercorn_config, shutdown_trigger=shutdown_event.wait)
     except Exception as e:
         logger.error(f"Web server error: {e}", exc_info=True)
         raise
@@ -89,19 +85,26 @@ async def main():
         logger.info("Discord metadata registered successfully")
 
         # Create tasks for bot and web server
+        # Note: hypercorn's serve() uses shutdown_trigger, so web server will stop when shutdown_event is set
         bot_task = asyncio.create_task(run_bot())
         web_task = asyncio.create_task(run_web_server())
 
-        # Wait for shutdown signal
-        await shutdown_event.wait()
+        # Wait for shutdown signal or either task to complete
+        done, pending = await asyncio.wait(
+            [bot_task, web_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
 
-        logger.info("Shutdown signal received, stopping services...")
+        logger.info("Shutdown initiated, stopping services...")
 
-        # Cancel tasks
-        bot_task.cancel()
-        web_task.cancel()
+        # Set shutdown event to stop web server gracefully
+        shutdown_event.set()
 
-        # Wait for tasks to complete cancellation
+        # Cancel remaining tasks
+        for task in pending:
+            task.cancel()
+
+        # Wait for all tasks to complete
         await asyncio.gather(bot_task, web_task, return_exceptions=True)
 
     except Exception as e:
