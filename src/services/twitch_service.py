@@ -94,7 +94,7 @@ class TwitchService:
                     )
 
                 logger.info("Successfully exchanged Twitch code for access token")
-                return access_token
+                return str(access_token)
 
         except httpx.RequestError as e:
             logger.error(f"Twitch API request error: {e}")
@@ -148,7 +148,7 @@ class TwitchService:
                         "Failed to fetch your Twitch information. Please try again.",
                     )
 
-                user_data = data[0]
+                user_data: dict[str, Any] = data[0]
                 logger.info(f"Fetched Twitch user info: {user_data.get('id')} ({user_data.get('login')})")
                 return user_data
 

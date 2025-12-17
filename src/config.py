@@ -16,6 +16,7 @@ class Config(BaseSettings):
     # Note: Client ID is same as Application ID, Client Secret from OAuth2 settings
     discord_oauth_client_id: str = Field(..., description="Discord application/client ID")
     discord_oauth_client_secret: str = Field(..., description="Discord OAuth client secret")
+    discord_oauth_redirect_uri: str = Field(..., description="Discord OAuth redirect URI")
     discord_linked_role_verification_url: str = Field(..., description="Discord Linked Roles verification URL")
 
     # Twitch OAuth (for account linking)
@@ -68,4 +69,5 @@ class Config(BaseSettings):
 
 
 # Global config instance
-config = Config()
+# Type ignore: pydantic-settings loads from environment variables automatically
+config = Config()  # type: ignore[call-arg]

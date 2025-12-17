@@ -204,7 +204,7 @@ class OAuthSessionRepository:
         result = await session.execute(
             delete(OAuthSession).where(
                 OAuthSession.expires_at < datetime.utcnow(),
-                OAuthSession.twitch_oauth_completed is False,
+                ~OAuthSession.twitch_oauth_completed,
             )
         )
         await session.flush()
@@ -229,7 +229,7 @@ class VerificationAuditLogRepository:
         reason: str | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
-    ) -> VerificationAuditLog:
+    ) -> VerificationAuditLog | None:
         """Create an audit log entry."""
         if not config.enable_audit_logging:
             logger.debug("Audit logging disabled, skipping log entry")

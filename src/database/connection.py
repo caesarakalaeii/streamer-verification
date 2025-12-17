@@ -39,7 +39,7 @@ def get_session_factory() -> sessionmaker:
     if _session_factory is None:
         engine = get_engine()
         _session_factory = sessionmaker(
-            engine,
+            bind=engine,
             class_=AsyncSession,
             expire_on_commit=False,
             autocommit=False,

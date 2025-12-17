@@ -57,6 +57,7 @@ jobs:
           DISCORD_BOT_TOKEN: test_token
           DISCORD_OAUTH_CLIENT_ID: test_id
           DISCORD_OAUTH_CLIENT_SECRET: test_secret
+          DISCORD_OAUTH_REDIRECT_URI: http://localhost:8080/linked-role
           DISCORD_LINKED_ROLE_VERIFICATION_URL: http://localhost:8080/linked-role
           TWITCH_CLIENT_ID: test_id
           TWITCH_CLIENT_SECRET: test_secret

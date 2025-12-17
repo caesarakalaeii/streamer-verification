@@ -28,7 +28,7 @@ def setup_commands(bot: commands.Bot) -> None:
     async def setup(
         interaction: discord.Interaction,
         verified_role: discord.Role,
-        admin_roles: str = None,
+        admin_roles: str | None = None,
     ):
         """
         Setup command: Configure the bot for this guild (server owner only).
@@ -36,6 +36,14 @@ def setup_commands(bot: commands.Bot) -> None:
         await interaction.response.defer(ephemeral=True)
 
         try:
+            # Ensure we're in a guild
+            if not interaction.guild or not isinstance(interaction.user, discord.Member):
+                await interaction.followup.send(
+                    "❌ This command can only be used in a server.",
+                    ephemeral=True,
+                )
+                return
+
             # Check if user is server owner or administrator
             if not (interaction.user.id == interaction.guild.owner_id or interaction.user.guild_permissions.administrator):
                 await interaction.followup.send(
@@ -141,11 +149,19 @@ def setup_commands(bot: commands.Bot) -> None:
         await interaction.response.defer(ephemeral=True)
 
         try:
+            # Ensure we're in a guild
+            if not interaction.guild or not isinstance(interaction.user, discord.Member):
+                await interaction.followup.send(
+                    "❌ This command can only be used in a server.",
+                    ephemeral=True,
+                )
+                return
+
             # Check if guild is configured
             async with get_db_session() as db_session:
                 guild_config = await GuildConfigRepository.get_by_guild_id(
                     db_session,
-                    interaction.guild_id,
+                    interaction.guild.id,
                 )
 
             if not guild_config:
@@ -211,11 +227,19 @@ def setup_commands(bot: commands.Bot) -> None:
         await interaction.response.defer(ephemeral=True)
 
         try:
+            # Ensure we're in a guild
+            if not interaction.guild or not isinstance(interaction.user, discord.Member):
+                await interaction.followup.send(
+                    "❌ This command can only be used in a server.",
+                    ephemeral=True,
+                )
+                return
+
             # Check if guild is configured
             async with get_db_session() as db_session:
                 guild_config = await GuildConfigRepository.get_by_guild_id(
                     db_session,
-                    interaction.guild_id,
+                    interaction.guild.id,
                 )
 
             if not guild_config:
@@ -280,6 +304,10 @@ def setup_commands(bot: commands.Bot) -> None:
 
 async def is_admin(interaction: discord.Interaction) -> bool:
     """Check if user has admin permissions based on guild config."""
+    # Ensure we're in a guild with a member
+    if not interaction.guild or not isinstance(interaction.user, discord.Member):
+        return False
+
     # Server owner always has permission
     if interaction.user.id == interaction.guild.owner_id:
         return True
@@ -292,7 +320,7 @@ async def is_admin(interaction: discord.Interaction) -> bool:
     async with get_db_session() as db_session:
         guild_config = await GuildConfigRepository.get_by_guild_id(
             db_session,
-            interaction.guild_id,
+            interaction.guild.id,
         )
 
         if not guild_config or not guild_config.admin_role_ids:

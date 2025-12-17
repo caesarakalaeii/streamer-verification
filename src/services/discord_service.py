@@ -118,7 +118,7 @@ class DiscordService:
                     )
 
                 logger.info("Successfully exchanged Discord code for access token")
-                return access_token
+                return str(access_token)
 
         except httpx.RequestError as e:
             logger.error(f"Discord API request error: {e}")
@@ -161,7 +161,7 @@ class DiscordService:
                         "Failed to fetch your Discord information. Please try again.",
                     )
 
-                user_data = response.json()
+                user_data: dict[str, Any] = response.json()
                 logger.info(f"Fetched Discord user info: {user_data.get('id')} ({user_data.get('username')})")
                 return user_data
 

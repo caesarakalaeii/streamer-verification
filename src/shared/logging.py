@@ -70,7 +70,7 @@ def setup_logging() -> None:
 
     # Select formatter based on config
     if config.log_format == "json":
-        formatter = JSONFormatter()
+        formatter: logging.Formatter = JSONFormatter()
     else:
         formatter = TextFormatter()
 
