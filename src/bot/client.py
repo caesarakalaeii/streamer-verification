@@ -44,6 +44,26 @@ def create_bot() -> commands.Bot:
         """Global error handler."""
         logger.error(f"Bot error in event {event}", exc_info=True)
 
+    @bot.tree.error
+    async def on_app_command_error(
+        interaction: discord.Interaction, error: discord.app_commands.AppCommandError
+    ):
+        """Global error handler for slash commands."""
+        logger.error(
+            f"Slash command error in {interaction.command.name if interaction.command else 'unknown'}: {error}",
+            exc_info=error,
+        )
+
+        # Try to send error message to user
+        try:
+            error_message = f"❌ An error occurred: {str(error)}"
+            if interaction.response.is_done():
+                await interaction.followup.send(error_message, ephemeral=True)
+            else:
+                await interaction.response.send_message(error_message, ephemeral=True)
+        except Exception as e:
+            logger.error(f"Failed to send error message to user: {e}")
+
     # Register cogs/commands
     from src.bot.commands import setup_commands
     from src.bot.events import setup_events
