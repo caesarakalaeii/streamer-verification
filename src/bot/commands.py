@@ -7,7 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.database.connection import get_db_session
-from src.database.repositories import GuildConfigRepository
+from src.database.repositories import GuildConfigRepository, UserVerificationRepository
 from src.services.verification_service import verification_service
 from src.shared.exceptions import RecordAlreadyExistsError
 
@@ -619,6 +619,76 @@ def setup_commands(bot: commands.Bot) -> None:
             logger.error(f"Error in verify command: {e}", exc_info=True)
             await interaction.response.send_message(
                 "❌ An error occurred. Please try again later.",
+                ephemeral=True,
+            )
+
+    @bot.tree.command(
+        name="whois",
+        description="Look up a Discord user's verified Twitch name",
+    )
+    @app_commands.describe(user="The Discord user to look up")
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    async def whois(interaction: discord.Interaction, user: discord.User):
+        """
+        Whois command: Look up a Discord user's Twitch verification.
+        Works in both servers and DMs.
+        """
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # Look up verification by Discord user ID
+            async with get_db_session() as db_session:
+                verification = await UserVerificationRepository.get_by_discord_id(
+                    db_session,
+                    user.id,
+                )
+
+            if not verification:
+                await interaction.followup.send(
+                    f"❌ {user.mention} has not verified their Twitch account.",
+                    ephemeral=True,
+                )
+                return
+
+            # Create embed with verification info
+            embed = discord.Embed(
+                title="🎮 Twitch Verification Lookup",
+                color=discord.Color.purple(),
+            )
+
+            embed.add_field(
+                name="Discord User",
+                value=user.mention,
+                inline=False,
+            )
+
+            twitch_display = (
+                verification.twitch_display_name or verification.twitch_username
+            )
+            embed.add_field(
+                name="Twitch Username",
+                value=f"**{twitch_display}**",
+                inline=False,
+            )
+
+            embed.add_field(
+                name="Verified At",
+                value=f"<t:{int(verification.verified_at.timestamp())}:F>",
+                inline=False,
+            )
+
+            embed.set_footer(text=f"Twitch ID: {verification.twitch_user_id}")
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            logger.info(
+                f"Whois command executed by user {interaction.user.id} for target {user.id}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error in whois command: {e}", exc_info=True)
+            await interaction.followup.send(
+                "❌ An error occurred while looking up the user. Please try again later.",
                 ephemeral=True,
             )
 

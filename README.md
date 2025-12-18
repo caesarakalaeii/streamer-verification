@@ -2,9 +2,27 @@
 
 A Python-based Discord bot that uses **Discord Linked Roles** to securely verify users via Twitch OAuth, automatically sets their Discord nickname to their Twitch username, and periodically enforces these nicknames.
 
+## Recent Updates
+
+### Latest Changes
+- ✨ **New `/whois` Command**: Look up any Discord user's verified Twitch name
+  - Works in DMs and servers
+  - Privacy-focused: One-way lookup only (Discord → Twitch, not reverse)
+  - Available to everyone, not just admins
+  - Ephemeral responses (only visible to you)
+- 🔧 **User Install Support**: Bot can now be added directly to user accounts
+  - No server required to use `/whois`
+  - Commands work in DMs and private channels
+  - Configured via Discord Developer Portal Installation settings
+- 🛠️ **Pre-commit Hooks**: Automated code quality checks
+  - black, ruff, mypy, and standard checks
+  - Runs automatically on git commit
+  - Ensures consistent code style
+
 ## Features
 
 - ✅ **Multi-Server Support**: Add to any server - each has its own configuration
+- ✅ **User Install Support**: Users can add the bot directly to their account (no server required)
 - ✅ **Zero Redeployment**: No code changes needed to add new servers
 - ✅ **Per-Guild Configuration**: Each server owner configures their own roles and settings
 - ✅ **Discord Native Integration**: Uses Discord's official Linked Roles API
@@ -14,7 +32,8 @@ A Python-based Discord bot that uses **Discord Linked Roles** to securely verify
 - ✅ **Automatic Nickname Management**: Sets and enforces Discord nicknames to match Twitch usernames
 - ✅ **Periodic Enforcement**: Checks and updates nicknames every 5 minutes (configurable per guild)
 - ✅ **Automatic Role Assignment**: Discord assigns role when metadata requirements are met
-- ✅ **Admin Commands**: `/setup`, `/unverify`, `/list-verified` for server management
+- ✅ **User Lookup**: `/whois` command to look up Discord user's Twitch name (one-way only, privacy-focused)
+- ✅ **Admin Commands**: `/setup`, `/unverify`, `/list-verified`, `/config` for server management
 - ✅ **Audit Logging**: Complete audit trail of all verification actions
 - ✅ **Docker Ready**: Fully containerized with Docker Compose
 - ✅ **CI/CD Pipeline**: GitHub Actions for automated testing and deployment
@@ -151,6 +170,17 @@ Bot enforces nickname periodically
 3. Enter: `http://your-domain.com/linked-role`
 4. Save changes
 
+#### Enable User Install (Optional but Recommended)
+1. Go to **Installation** section
+2. Under **Installation Contexts**, enable:
+   - ✅ Guild Install (for server installations)
+   - ✅ User Install (allows users to add bot to their account)
+3. Under **Install Link**, select "Discord Provided Link"
+4. Under **Default Install Settings**:
+   - For Guild Install: Add scopes `bot` and `applications.commands`, permissions: Manage Nicknames, Manage Roles
+   - For User Install: Add scope `applications.commands` only
+5. Save changes
+
 #### Invite Bot to Server
 1. Go to **OAuth2 → URL Generator**
 2. Select scopes:
@@ -160,6 +190,8 @@ Bot enforces nickname periodically
    - Manage Nicknames
    - Manage Roles
 4. Copy the generated URL and open it to invite the bot
+
+**Note**: With user install enabled, users can also add the bot directly to their account using the Discord Provided Link from the Installation section.
 
 ### 2. Twitch Application Setup
 
@@ -293,7 +325,41 @@ After setup, users can start verifying!
 8. Done! Your profile shows your Twitch connection
 9. You automatically get the verified role
 
+### For Everyone (User Install)
+
+#### User Install Feature
+
+You can add this bot directly to your Discord account without joining any server:
+
+1. Click the bot's invite link with **user install enabled**
+2. Select "Add to account" instead of selecting a server
+3. Use `/whois` command anywhere in DMs or servers
+
+This lets you look up any Discord user's verified Twitch name without needing server permissions.
+
+#### `/whois @user`
+Look up a Discord user's verified Twitch name (available to everyone).
+
+```
+/whois @username
+```
+
+**Privacy Features:**
+- ✅ **One-way lookup only**: Discord → Twitch (prevents reverse lookup of streamers)
+- ✅ **Works in DMs**: No server required when user-installed
+- ✅ **Works in servers**: Also available in any server with the bot
+- ✅ **Ephemeral responses**: Results only visible to you
+
 ### For Server Admins
+
+#### `/config`
+View or update server configuration (admin only).
+
+```
+/config
+/config verified_role:@NewRole
+/config nickname_enforcement:True
+```
 
 #### `/unverify @user`
 Removes a user's verification (admin only).
@@ -363,12 +429,37 @@ Complete audit trail of all verification actions for security monitoring. Includ
 
 ## Development
 
+### Setup Development Environment
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# Install pre-commit hooks (recommended)
+pipx install pre-commit
+pre-commit install
+
+# Pre-commit will now run automatically on git commit
+# To run manually on all files:
+pre-commit run --all-files
+```
+
+### Pre-commit Hooks
+
+The project uses pre-commit hooks for code quality:
+- **black**: Code formatting
+- **ruff**: Linting and auto-fixes
+- **mypy**: Type checking
+- **trailing-whitespace**: Remove trailing whitespace
+- **end-of-file-fixer**: Ensure files end with newline
+- **check-yaml**: Validate YAML files
+- **check-added-large-files**: Prevent large files
+- **check-merge-conflict**: Detect merge conflicts
+
 ### Running Tests
 
 ```bash
-# Install dev dependencies
-pip install -r requirements-dev.txt
-
 # Run tests
 pytest tests/
 
@@ -379,11 +470,13 @@ pytest tests/ --cov=src --cov-report=html
 ### Linting and Type Checking
 
 ```bash
-# Run ruff linter
-ruff check src/
+# Run all pre-commit hooks manually
+pre-commit run --all-files
 
-# Run mypy type checker
+# Or run individual tools:
+ruff check src/
 mypy src/
+black src/
 ```
 
 ## Troubleshooting

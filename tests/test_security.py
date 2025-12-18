@@ -1,7 +1,5 @@
 """Tests for security service."""
 
-import pytest
-
 from src.services.security_service import security_service
 
 

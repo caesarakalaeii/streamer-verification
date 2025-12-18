@@ -10,9 +10,9 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.config import config
-from src.database.connection import init_db, close_db
-from src.shared.logging import setup_logging
+from src.config import config  # noqa: E402
+from src.database.connection import close_db, init_db  # noqa: E402
+from src.shared.logging import setup_logging  # noqa: E402
 
 
 async def main() -> None:
