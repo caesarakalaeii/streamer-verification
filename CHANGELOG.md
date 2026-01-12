@@ -42,6 +42,7 @@ All notable changes to this project will be documented in this file.
 - Documented privacy features of `/whois` command
 - Documented pg_trgm-backed cache lookups in README and
   `IMPERSONATION_DETECTION.md`
+- Added `IMPERSONATION_SETUP_GUIDE.md` for the new detection feature
 
 ## Purpose of `/whois` Command
 

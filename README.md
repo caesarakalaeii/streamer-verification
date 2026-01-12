@@ -343,6 +343,14 @@ You can add this bot directly to your Discord account without joining any server
 This lets you look up any Discord user's verified Twitch name without needing server permissions.
 
 #### `/whois @user`
+
+## Impersonation Detection
+
+- Read the full [Impersonation Detection Setup Guide](IMPERSONATION_SETUP_GUIDE.md)
+  for step-by-step instructions (database prerequisites, slash command
+  configuration, alert review workflow).
+- See [IMPERSONATION_DETECTION.md](IMPERSONATION_DETECTION.md) for technical
+  details about scoring, cache strategy, and automation options.
 Look up a Discord user's verified Twitch name (available to everyone).
 
 ```
