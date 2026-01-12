@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TypedDict
 
 import discord
@@ -90,7 +90,7 @@ class ImpersonationDetectionService:
                     return None
 
             # Get user's Discord account age in days
-            account_age_days = (datetime.utcnow() - member.created_at).days
+            account_age_days = self._calculate_account_age_days(member.created_at)
 
             # Get user's bio (if available from member profile)
             discord_bio = None
@@ -260,6 +260,21 @@ class ImpersonationDetectionService:
             )
             await db_session.rollback()
             return None
+
+    @staticmethod
+    def _calculate_account_age_days(
+        created_at: datetime, current_time: datetime | None = None
+    ) -> int:
+        """Return account age in days, handling timezone-aware values."""
+
+        reference_time = current_time or datetime.now(timezone.utc)
+
+        normalized_created = created_at
+        if created_at.tzinfo is None or created_at.tzinfo.utcoffset(created_at) is None:
+            normalized_created = created_at.replace(tzinfo=timezone.utc)
+
+        age_delta = reference_time - normalized_created
+        return max(age_delta.days, 0)
 
     def _calculate_username_similarity(self, username1: str, username2: str) -> float:
         """
