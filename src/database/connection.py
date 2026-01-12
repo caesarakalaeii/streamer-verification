@@ -118,14 +118,22 @@ async def init_db() -> None:
         migrations_dir = Path("src/database/migrations")
         migration_files = sorted(migrations_dir.glob("*.sql"))
 
-        for migration_file in migration_files:
-            logger.info("Applying migration %s", migration_file.name)
-            migration_sql = migration_file.read_text()
-            await conn.execute(migration_sql)
+        try:
+            for migration_file in migration_files:
+                logger.info("Applying migration %s", migration_file.name)
+                migration_sql = migration_file.read_text()
+                await conn.execute(migration_sql)
 
-        logger.info("Database migrations completed successfully")
-
-        await conn.close()
+            logger.info("Database migrations completed successfully")
+        except asyncpg.exceptions.InsufficientPrivilegeError as exc:
+            logger.warning(
+                "Skipping migrations because user '%s' lacks privileges: %s. "
+                "Run scripts/init_db.py with a privileged account to apply pending migrations.",
+                config.database_user,
+                exc,
+            )
+        finally:
+            await conn.close()
     except Exception as e:
         logger.error(f"Failed to run migrations: {e}", exc_info=True)
         raise
