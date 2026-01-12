@@ -31,7 +31,7 @@ class ActionReasonModal(discord.ui.Modal):
         self.action = action
         self.detection_id = detection_id
 
-    reason = discord.ui.TextInput(
+    reason: discord.ui.TextInput = discord.ui.TextInput(
         label="Reason",
         placeholder="Reason for this action (will be shown to user if applicable)",
         required=False,
@@ -39,7 +39,7 @@ class ActionReasonModal(discord.ui.Modal):
         style=discord.TextStyle.short,
     )
 
-    notes = discord.ui.TextInput(
+    notes: discord.ui.TextInput = discord.ui.TextInput(
         label="Private Notes",
         placeholder="Internal notes for moderators (not shown to user)",
         required=False,
@@ -52,6 +52,13 @@ class ActionReasonModal(discord.ui.Modal):
         await interaction.response.defer(ephemeral=True)
 
         try:
+            # Ensure user is a Member (not User)
+            if not isinstance(interaction.user, discord.Member):
+                await interaction.followup.send(
+                    "❌ This command can only be used in a server.", ephemeral=True
+                )
+                return
+
             # Get detection from database
             async with get_db_session() as db_session:
                 detection = await ImpersonationDetectionRepository.get_by_id(
@@ -149,6 +156,10 @@ class ImpersonationAlertView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         """Handle ban button click."""
+        if not button.custom_id:
+            await interaction.response.send_message("❌ Invalid button", ephemeral=True)
+            return
+
         detection_id = self._parse_detection_id(button.custom_id)
         if not detection_id:
             await interaction.response.send_message(
@@ -156,7 +167,13 @@ class ImpersonationAlertView(discord.ui.View):
             )
             return
 
-        # Check permissions
+        # Check permissions (ensure user is Member)
+        if not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message(
+                "❌ This action can only be used in a server.", ephemeral=True
+            )
+            return
+
         if not interaction.user.guild_permissions.ban_members:
             await interaction.response.send_message(
                 "❌ You don't have permission to ban members.", ephemeral=True
@@ -177,6 +194,10 @@ class ImpersonationAlertView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         """Handle kick button click."""
+        if not button.custom_id:
+            await interaction.response.send_message("❌ Invalid button", ephemeral=True)
+            return
+
         detection_id = self._parse_detection_id(button.custom_id)
         if not detection_id:
             await interaction.response.send_message(
@@ -184,7 +205,13 @@ class ImpersonationAlertView(discord.ui.View):
             )
             return
 
-        # Check permissions
+        # Check permissions (ensure user is Member)
+        if not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message(
+                "❌ This action can only be used in a server.", ephemeral=True
+            )
+            return
+
         if not interaction.user.guild_permissions.kick_members:
             await interaction.response.send_message(
                 "❌ You don't have permission to kick members.", ephemeral=True
@@ -205,6 +232,10 @@ class ImpersonationAlertView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         """Handle warn button click."""
+        if not button.custom_id:
+            await interaction.response.send_message("❌ Invalid button", ephemeral=True)
+            return
+
         detection_id = self._parse_detection_id(button.custom_id)
         if not detection_id:
             await interaction.response.send_message(
@@ -212,10 +243,17 @@ class ImpersonationAlertView(discord.ui.View):
             )
             return
 
+        # Ensure user is Member and guild exists
+        if not isinstance(interaction.user, discord.Member) or not interaction.guild:
+            await interaction.response.send_message(
+                "❌ This action can only be used in a server.", ephemeral=True
+            )
+            return
+
         # Check permissions (moderators can warn)
         async with get_db_session() as db_session:
             guild_config = await GuildConfigRepository.get_by_guild_id(
-                db_session, interaction.guild_id
+                db_session, interaction.guild.id
             )
 
         if guild_config:
@@ -254,6 +292,10 @@ class ImpersonationAlertView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         """Handle mark safe button click."""
+        if not button.custom_id:
+            await interaction.response.send_message("❌ Invalid button", ephemeral=True)
+            return
+
         detection_id = self._parse_detection_id(button.custom_id)
         if not detection_id:
             await interaction.response.send_message(
@@ -264,6 +306,13 @@ class ImpersonationAlertView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
 
         try:
+            # Ensure user is Member
+            if not isinstance(interaction.user, discord.Member):
+                await interaction.followup.send(
+                    "❌ This action can only be used in a server.", ephemeral=True
+                )
+                return
+
             # Get detection and execute action
             async with get_db_session() as db_session:
                 detection = await ImpersonationDetectionRepository.get_by_id(
@@ -325,6 +374,10 @@ class ImpersonationAlertView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         """Handle false positive button click (adds to whitelist)."""
+        if not button.custom_id:
+            await interaction.response.send_message("❌ Invalid button", ephemeral=True)
+            return
+
         detection_id = self._parse_detection_id(button.custom_id)
         if not detection_id:
             await interaction.response.send_message(
@@ -335,6 +388,13 @@ class ImpersonationAlertView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
 
         try:
+            # Ensure user is Member
+            if not isinstance(interaction.user, discord.Member):
+                await interaction.followup.send(
+                    "❌ This action can only be used in a server.", ephemeral=True
+                )
+                return
+
             # Get detection and execute action
             async with get_db_session() as db_session:
                 detection = await ImpersonationDetectionRepository.get_by_id(

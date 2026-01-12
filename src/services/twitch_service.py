@@ -328,7 +328,7 @@ class TwitchService:
             "Client-Id": config.twitch_client_id,
         }
 
-        params = {"broadcaster_id": user_id, "first": 1}
+        params: dict[str, str | int] = {"broadcaster_id": user_id, "first": 1}
 
         try:
             async with httpx.AsyncClient() as client:
