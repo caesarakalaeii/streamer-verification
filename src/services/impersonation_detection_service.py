@@ -1,5 +1,6 @@
 """Impersonation detection service for identifying potential streamer impersonators."""
 
+import asyncio
 import logging
 import re
 from datetime import datetime
@@ -16,6 +17,7 @@ from src.database.repositories import (
     ImpersonationWhitelistRepository,
     StreamerCacheRepository,
 )
+from src.services.rate_limiter import twitch_rate_limiter
 from src.services.twitch_service import twitch_service
 from src.shared.exceptions import TwitchAPIError
 
@@ -43,6 +45,9 @@ class ImpersonationDetectionService:
         self._similarity_cache: dict[tuple[str, str], float] = (
             {}
         )  # Manual cache to avoid lru_cache memory leak
+        self._auto_populate_semaphore = asyncio.Semaphore(
+            5
+        )  # Max 5 concurrent auto-populate operations
 
     async def check_user(
         self,
@@ -139,13 +144,20 @@ class ImpersonationDetectionService:
             # Auto-populate cache if no good match found
             # This happens when cache is empty or user resembles an uncached streamer
             if best_score < self.min_similarity_threshold or not best_match:
+                # Log current rate limit usage
+                current, maximum = twitch_rate_limiter.get_current_usage()
                 logger.info(
                     f"No strong match in cache for {member.name} (score: {best_score}), "
-                    f"auto-populating from Twitch API"
+                    f"auto-populating from Twitch API (rate limit: {current}/{maximum})"
                 )
 
-                # Search Twitch and add results to cache
-                added_count = await self._auto_populate_cache(db_session, member.name)
+                # Use semaphore to limit concurrent auto-populate operations
+                # This prevents overwhelming the API during mass scans
+                async with self._auto_populate_semaphore:
+                    # Search Twitch and add results to cache
+                    added_count = await self._auto_populate_cache(
+                        db_session, member.name
+                    )
 
                 if added_count > 0:
                     # Re-fetch cache with new entries
@@ -570,8 +582,8 @@ class ImpersonationDetectionService:
 
             added_count = 0
 
-            # Add each result to cache
-            for result in search_results:
+            # Add each result to cache (with rate limiting)
+            for i, result in enumerate(search_results):
                 twitch_user_id = result.get("id")
                 twitch_username = result.get("broadcaster_login")
 
@@ -629,6 +641,11 @@ class ImpersonationDetectionService:
                 except Exception as e:
                     logger.warning(f"Failed to add {twitch_username} to cache: {e}")
                     continue
+
+                # Small delay between processing results to spread out API calls
+                # This helps when multiple auto-populate operations run concurrently
+                if i < len(search_results) - 1:  # Don't delay after last item
+                    await asyncio.sleep(0.1)
 
             await db_session.commit()
             logger.info(

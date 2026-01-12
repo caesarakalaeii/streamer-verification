@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from src.config import config
+from src.services.rate_limiter import twitch_rate_limiter
 from src.shared.constants import (
     TWITCH_HELIX_FOLLOWERS,
     TWITCH_HELIX_SEARCH_CHANNELS,
@@ -179,6 +180,9 @@ class TwitchService:
         Raises:
             TwitchAPIError: Failed to get app token
         """
+        # Rate limiting
+        await twitch_rate_limiter.acquire()
+
         data = {
             "client_id": config.twitch_client_id,
             "client_secret": config.twitch_client_secret,
@@ -250,6 +254,9 @@ class TwitchService:
 
         # Get app access token
         app_token = await TwitchService.get_app_access_token()
+
+        # Rate limiting
+        await twitch_rate_limiter.acquire()
 
         headers = {
             "Authorization": f"Bearer {app_token}",
@@ -323,6 +330,9 @@ class TwitchService:
         """
         # Get app access token
         app_token = await TwitchService.get_app_access_token()
+
+        # Rate limiting
+        await twitch_rate_limiter.acquire()
 
         headers = {
             "Authorization": f"Bearer {app_token}",
@@ -408,6 +418,9 @@ class TwitchService:
         """
         # Get app access token
         app_token = await TwitchService.get_app_access_token()
+
+        # Rate limiting
+        await twitch_rate_limiter.acquire()
 
         headers = {
             "Authorization": f"Bearer {app_token}",
