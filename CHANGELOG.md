@@ -29,6 +29,10 @@ All notable changes to this project will be documented in this file.
 - Updated `.pre-commit-config.yaml` to use `python3` instead of `python3.11`
 - Added `UserVerificationRepository` import to `src/bot/commands.py`
 - Added `noqa: E402` comments to `scripts/init_db.py` for legitimate import ordering
+- Impersonation detection now queries streamer cache via PostgreSQL trigram
+  similarity instead of loading every entry into memory
+- `scripts/init_db.py` executes every SQL migration (including pg_trgm extension)
+  to keep the database schema in sync
 
 ### Documentation
 - Updated README.md with new `/whois` command documentation
@@ -36,6 +40,8 @@ All notable changes to this project will be documented in this file.
 - Added user install setup instructions for Discord Developer Portal
 - Added pre-commit hooks documentation
 - Documented privacy features of `/whois` command
+- Documented pg_trgm-backed cache lookups in README and
+  `IMPERSONATION_DETECTION.md`
 
 ## Purpose of `/whois` Command
 

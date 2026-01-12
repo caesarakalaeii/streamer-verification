@@ -4,8 +4,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Sequence
 
-from sqlalchemy import delete, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import config
@@ -465,9 +465,91 @@ class StreamerCacheRepository:
 
     @staticmethod
     async def get_all_cached(session: AsyncSession) -> Sequence[StreamerCache]:
-        """Get all cached streamers."""
+        """
+        Get all cached streamers.
+
+        WARNING: This loads all streamers into memory. For detection checks,
+        use get_candidates_for_username() instead for better performance.
+        """
         result = await session.execute(select(StreamerCache))
         return result.scalars().all()
+
+    @staticmethod
+    async def get_candidates_for_username(
+        session: AsyncSession, username: str, limit: int = 50
+    ) -> Sequence[StreamerCache]:
+        """
+        Get candidate streamers for similarity checking based on username.
+
+        Uses length-based pre-filtering to avoid loading all streamers into memory.
+        Only returns streamers with similar username lengths (±3 characters).
+
+        Args:
+            session: Database session
+            username: Username to find candidates for
+            limit: Maximum number of candidates to return
+
+        Returns:
+            Streamers with similar username lengths, ordered by most recently updated
+        """
+        username_len = len(username)
+        min_len = max(3, username_len - 3)  # Minimum 3 chars
+        max_len = username_len + 3
+
+        result = await session.execute(
+            select(StreamerCache)
+            .where(
+                # Length-based pre-filter (uses function index if available)
+                StreamerCache.twitch_username.op("~")(f"^.{{{min_len},{max_len}}}$")
+            )
+            .order_by(StreamerCache.last_updated.desc())
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    @staticmethod
+    async def search_by_similarity(
+        session: AsyncSession,
+        username: str,
+        limit: int = 50,
+        min_similarity: float = 0.3,
+    ) -> Sequence[StreamerCache]:
+        """Find candidate streamers using PostgreSQL trigram similarity."""
+
+        if not username:
+            return []
+
+        username_len = len(username)
+        min_len = max(3, username_len - 3)
+        max_len = username_len + 3
+
+        similarity_expr = func.similarity(StreamerCache.twitch_username, username)
+
+        stmt = (
+            select(StreamerCache)
+            .where(
+                StreamerCache.twitch_username.op("~")(f"^.{{{min_len},{max_len}}}$"),
+                StreamerCache.twitch_username.op("%")(username),
+                similarity_expr >= min_similarity,
+            )
+            .order_by(similarity_expr.desc(), StreamerCache.last_updated.desc())
+            .limit(limit)
+        )
+
+        try:
+            result = await session.execute(stmt)
+            matches = result.scalars().all()
+            if matches:
+                return matches
+        except ProgrammingError as exc:  # Extension not installed yet
+            logger.warning(
+                "pg_trgm extension unavailable, falling back to length-based search: %s",
+                exc,
+            )
+
+        return await StreamerCacheRepository.get_candidates_for_username(
+            session, username, limit
+        )
 
     @staticmethod
     async def get_stale_entries(

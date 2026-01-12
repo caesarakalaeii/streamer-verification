@@ -2,6 +2,7 @@
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
@@ -114,11 +115,14 @@ async def init_db() -> None:
             database=config.database_name,
         )
 
-        # Read and execute migration SQL
-        with open("src/database/migrations/001_initial_schema.sql", "r") as f:
-            migration_sql = f.read()
+        migrations_dir = Path("src/database/migrations")
+        migration_files = sorted(migrations_dir.glob("*.sql"))
 
-        await conn.execute(migration_sql)
+        for migration_file in migration_files:
+            logger.info("Applying migration %s", migration_file.name)
+            migration_sql = migration_file.read_text()
+            await conn.execute(migration_sql)
+
         logger.info("Database migrations completed successfully")
 
         await conn.close()

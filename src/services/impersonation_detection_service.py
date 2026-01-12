@@ -97,8 +97,10 @@ class ImpersonationDetectionService:
             if hasattr(member, "bio") and member.bio:
                 discord_bio = member.bio
 
-            # Get all cached streamers
-            cached_streamers = await StreamerCacheRepository.get_all_cached(db_session)
+            # Fetch only the most relevant cached streamers from the database
+            cached_streamers = await StreamerCacheRepository.search_by_similarity(
+                db_session, member.name
+            )
 
             # Find the best match among cached streamers
             best_match: dict | None = None
@@ -160,9 +162,11 @@ class ImpersonationDetectionService:
                     )
 
                 if added_count > 0:
-                    # Re-fetch cache with new entries
-                    cached_streamers = await StreamerCacheRepository.get_all_cached(
-                        db_session
+                    # Re-fetch targeted candidates with the expanded cache
+                    cached_streamers = (
+                        await StreamerCacheRepository.search_by_similarity(
+                            db_session, member.name
+                        )
                     )
 
                     # Second pass: check expanded cache

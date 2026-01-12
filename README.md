@@ -296,6 +296,11 @@ python scripts/init_db.py
 python src/main.py
 ```
 
+> `scripts/init_db.py` runs every SQL file in `src/database/migrations`, including
+> enabling the PostgreSQL `pg_trgm` extension and trigram index that power fast
+> streamer similarity lookups. If you manage migrations manually, make sure to
+> apply `002_pg_trgm_extension.sql` after the base schema.
+
 ## Usage
 
 ### For Server Owners (First Time Setup)

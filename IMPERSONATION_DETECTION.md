@@ -123,6 +123,14 @@ Minimize Twitch API calls while maintaining fresh data for accurate detection.
 - **TTL**: 7 days for general data, 24 hours for follower/bio refresh
 - **Refresh**: Automatic daily task + manual `/impersonation-cache-refresh`
 
+### High-Scale Lookups
+- Uses PostgreSQL's `pg_trgm` extension + GIN index to search by trigram
+  similarity directly in the database
+- Limits memory usage by streaming only the top ~50 closest usernames per
+  Discord join event instead of loading the entire cache into Python
+- Automatically falls back to length-based filtering if the extension is
+  unavailable (e.g., during tests)
+
 ## Handling Strategies
 
 Admins can enable strategies independently:
