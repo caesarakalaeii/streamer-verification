@@ -94,14 +94,12 @@ class ImpersonationDetectionService:
 
             # Get all cached streamers
             cached_streamers = await StreamerCacheRepository.get_all_cached(db_session)
-            if not cached_streamers:
-                logger.debug("No cached streamers found, skipping impersonation check")
-                return None
 
             # Find the best match among cached streamers
             best_match: dict | None = None
             best_score = 0
 
+            # First pass: check existing cache
             for cached_streamer in cached_streamers:
                 # Calculate username similarity
                 similarity = self._calculate_username_similarity(
@@ -137,6 +135,59 @@ class ImpersonationDetectionService:
                         "bio_similarity": bio_similarity,
                         "scores": candidate_scores,
                     }
+
+            # Auto-populate cache if no good match found
+            # This happens when cache is empty or user resembles an uncached streamer
+            if best_score < self.min_similarity_threshold or not best_match:
+                logger.info(
+                    f"No strong match in cache for {member.name} (score: {best_score}), "
+                    f"auto-populating from Twitch API"
+                )
+
+                # Search Twitch and add results to cache
+                added_count = await self._auto_populate_cache(db_session, member.name)
+
+                if added_count > 0:
+                    # Re-fetch cache with new entries
+                    cached_streamers = await StreamerCacheRepository.get_all_cached(
+                        db_session
+                    )
+
+                    # Second pass: check expanded cache
+                    for cached_streamer in cached_streamers:
+                        similarity = self._calculate_username_similarity(
+                            member.name, cached_streamer.twitch_username
+                        )
+
+                        if similarity < self.min_similarity_threshold:
+                            continue
+
+                        bio_similarity = 0.0
+                        if discord_bio and cached_streamer.description:
+                            bio_similarity = fuzz.ratio(
+                                discord_bio.lower(), cached_streamer.description.lower()
+                            )
+
+                        candidate_scores = self._calculate_score(
+                            username_similarity=similarity,
+                            account_age_days=account_age_days,
+                            bio_similarity=bio_similarity,
+                            follower_count=cached_streamer.follower_count,
+                            has_discord_link=cached_streamer.has_discord_link,
+                        )
+
+                        if candidate_scores["total_score"] > best_score:
+                            best_score = candidate_scores["total_score"]
+                            best_match = {
+                                "streamer": cached_streamer,
+                                "similarity": similarity,
+                                "bio_similarity": bio_similarity,
+                                "scores": candidate_scores,
+                            }
+
+                    logger.info(
+                        f"After auto-populate: best score {best_score} for {member.name}"
+                    )
 
             # If best score is below 40, not suspicious enough to report
             if best_score < 40 or best_match is None:
@@ -478,6 +529,117 @@ class ImpersonationDetectionService:
             )
             await db_session.rollback()
             return False
+
+    async def _auto_populate_cache(
+        self, db_session: AsyncSession, username: str
+    ) -> int:
+        """
+        Auto-populate cache by searching Twitch API for similar streamers.
+
+        Args:
+            db_session: Database session
+            username: Username to search for (typically a Discord username)
+
+        Returns:
+            Number of new streamers added to cache
+        """
+        try:
+            # Normalize username for better search results
+            search_query = self._normalize_username(username)
+
+            # If normalized is too short, use original
+            if len(search_query) < 3:
+                search_query = username
+
+            logger.info(
+                f"Auto-populating cache by searching Twitch for '{search_query}'"
+            )
+
+            # Search Twitch for similar channels
+            try:
+                search_results = await twitch_service.search_channels(
+                    query=search_query, limit=10
+                )
+            except TwitchAPIError as e:
+                logger.warning(f"Twitch search failed for '{search_query}': {e}")
+                return 0
+
+            if not search_results:
+                logger.debug(f"No Twitch channels found for '{search_query}'")
+                return 0
+
+            added_count = 0
+
+            # Add each result to cache
+            for result in search_results:
+                twitch_user_id = result.get("id")
+                twitch_username = result.get("broadcaster_login")
+
+                if not twitch_user_id or not twitch_username:
+                    continue
+
+                # Check if already in cache
+                existing = await StreamerCacheRepository.get_by_twitch_id(
+                    db_session, twitch_user_id
+                )
+                if existing:
+                    # Increment cache hit counter
+                    await StreamerCacheRepository.increment_cache_hits(
+                        db_session, twitch_user_id
+                    )
+                    continue
+
+                # Get full profile and follower count
+                try:
+                    profile = await twitch_service.get_user_profile(
+                        user_id=twitch_user_id
+                    )
+                    follower_count = await twitch_service.get_follower_count(
+                        twitch_user_id
+                    )
+                except TwitchAPIError as e:
+                    logger.warning(
+                        f"Failed to fetch profile for {twitch_username}: {e}"
+                    )
+                    # Use search result data as fallback
+                    profile = result
+                    follower_count = 0
+
+                # Check for Discord link
+                description = profile.get("description", "")
+                has_discord_link = twitch_service.has_discord_link(description)
+
+                # Add to cache
+                try:
+                    await StreamerCacheRepository.create(
+                        db_session,
+                        twitch_user_id=twitch_user_id,
+                        twitch_username=twitch_username,
+                        twitch_display_name=profile.get("display_name"),
+                        follower_count=follower_count,
+                        description=description,
+                        has_discord_link=has_discord_link,
+                        profile_image_url=profile.get("thumbnail_url")
+                        or profile.get("profile_image_url"),
+                    )
+                    added_count += 1
+                    logger.info(
+                        f"Added {twitch_username} to cache (followers: {follower_count})"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to add {twitch_username} to cache: {e}")
+                    continue
+
+            await db_session.commit()
+            logger.info(
+                f"Auto-populated cache: added {added_count} streamers from search '{search_query}'"
+            )
+            return added_count
+
+        except Exception as e:
+            logger.error(f"Error in auto-populate cache: {e}", exc_info=True)
+            await db_session.rollback()
+            return 0
 
 
 # Global service instance

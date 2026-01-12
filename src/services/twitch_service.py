@@ -9,6 +9,7 @@ import httpx
 from src.config import config
 from src.shared.constants import (
     TWITCH_HELIX_FOLLOWERS,
+    TWITCH_HELIX_SEARCH_CHANNELS,
     TWITCH_HELIX_USERS,
     TWITCH_OAUTH_AUTHORIZE,
     TWITCH_OAUTH_SCOPES,
@@ -389,6 +390,63 @@ class TwitchService:
                 return True
 
         return False
+
+    @staticmethod
+    async def search_channels(query: str, limit: int = 10) -> list[dict[str, Any]]:
+        """
+        Search for Twitch channels by name.
+
+        Args:
+            query: Search query (username or partial username)
+            limit: Maximum number of results (default: 10, max: 100)
+
+        Returns:
+            List of channel data dicts with 'id', 'broadcaster_login', 'display_name', etc.
+
+        Raises:
+            TwitchAPIError: Failed to search channels
+        """
+        # Get app access token
+        app_token = await TwitchService.get_app_access_token()
+
+        headers = {
+            "Authorization": f"Bearer {app_token}",
+            "Client-Id": config.twitch_client_id,
+        }
+
+        params: dict[str, str | int] = {"query": query, "first": min(limit, 100)}
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    TWITCH_HELIX_SEARCH_CHANNELS,
+                    headers=headers,
+                    params=params,
+                    timeout=10.0,
+                )
+
+                if response.status_code != 200:
+                    error_data = response.json() if response.content else {}
+                    logger.error(
+                        f"Twitch channel search failed: {response.status_code}, {error_data}"
+                    )
+                    raise TwitchAPIError(
+                        f"Failed to search channels: {response.status_code}",
+                        "Failed to search Twitch channels.",
+                    )
+
+                response_data = response.json()
+                data: list[dict[str, Any]] = response_data.get("data", [])
+
+                logger.debug(f"Found {len(data)} channels matching '{query}'")
+                return data
+
+        except httpx.RequestError as e:
+            logger.error(f"Twitch API request error: {e}")
+            raise TwitchAPIError(
+                f"Twitch API request failed: {e}",
+                "Failed to connect to Twitch API.",
+            ) from e
 
 
 # Global instance

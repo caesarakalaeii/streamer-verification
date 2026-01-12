@@ -37,6 +37,7 @@ TWITCH_OAUTH_TOKEN = "https://id.twitch.tv/oauth2/token"
 TWITCH_HELIX_USERS = "https://api.twitch.tv/helix/users"
 TWITCH_HELIX_CHANNELS = "https://api.twitch.tv/helix/channels"
 TWITCH_HELIX_FOLLOWERS = "https://api.twitch.tv/helix/channels/followers"
+TWITCH_HELIX_SEARCH_CHANNELS = "https://api.twitch.tv/helix/search/channels"
 
 # Error Messages
 ERROR_TOKEN_EXPIRED = "Your verification link has expired. Please run /verify again."
