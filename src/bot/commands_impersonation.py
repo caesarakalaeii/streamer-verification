@@ -728,7 +728,7 @@ def setup_impersonation_commands(bot: commands.Bot) -> None:
         description="View impersonation detection statistics",
     )
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(period="Time period (24h, 7d, 30d, all)", default="7d")
+    @app_commands.describe(period="Time period (24h, 7d, 30d, all)")
     async def impersonation_stats(interaction: discord.Interaction, period: str = "7d"):
         """View impersonation detection statistics."""
         await interaction.response.defer(ephemeral=True)
