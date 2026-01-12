@@ -346,11 +346,12 @@ This lets you look up any Discord user's verified Twitch name without needing se
 
 ## Impersonation Detection
 
-- Read the full [Impersonation Detection Setup Guide](IMPERSONATION_SETUP_GUIDE.md)
-  for step-by-step instructions (database prerequisites, slash command
-  configuration, alert review workflow).
-- See [IMPERSONATION_DETECTION.md](IMPERSONATION_DETECTION.md) for technical
-  details about scoring, cache strategy, and automation options.
+- **Server owners**: follow the
+  [Impersonation Detection Setup Guide](IMPERSONATION_SETUP_GUIDE.md) to install
+  the public bot, run `/impersonation-setup`, and manage alerts.
+- **Want details?** Read
+  [IMPERSONATION_DETECTION.md](IMPERSONATION_DETECTION.md) for the scoring model
+  and architecture.
 Look up a Discord user's verified Twitch name (available to everyone).
 
 ```

@@ -1,36 +1,37 @@
-# Impersonation Detection Setup Guide
+# Impersonation Detection Setup (Discord Server Owners)
 
-This guide walks you through enabling the new impersonation detection system in
-your production deployment. It assumes you already have the verification bot
-running and connected to PostgreSQL.
+Use this guide to enable the deployed impersonation detection bot in **your**
+server. No coding or self-hosting is required—just install the bot, configure a
+few commands, and you’re ready to catch Twitch impersonators automatically.
 
-## 1. Prerequisites
+## 1. Install the Bot
 
-1. **Database migration** – run `python scripts/init_db.py` (or apply
-   `src/database/migrations/002_pg_trgm_extension.sql`) with a privileged
-   account. This enables the `pg_trgm` extension and creates the trigram index
-   used for similarity searches.
-2. **Bot version** – deploy `main` (or any build containing commit
-   `c92d536` or newer). Older images do not include the optimized lookup path.
-3. **Permissions** – ensure the bot has `Manage Roles`, `Manage Nicknames`, and
-   `View Audit Log` if you plan to auto-quarantine or auto-update nicknames.
+1. Open this invite link:
+   https://discord.com/oauth2/authorize?client_id=1450803650707587193
+2. Choose your server and authorize the requested permissions (Manage Roles,
+   Manage Nicknames, View Audit Log, etc.).
+3. Confirm the bot appears online in your server.
 
-## 2. Discord Server Preparation
+> Tip: Only users with the “Manage Server” permission can add bots.
 
-| Resource | Purpose | Notes |
-|----------|---------|-------|
-| Moderation channel | Receives alert embeds | Discord text channel visible to moderators only |
-| Quarantine role *(optional)* | Auto-quarantine action target | Remove send/reaction permissions |
-| Trusted roles *(optional)* | Exempt known verified users | e.g. Discord-native `Twitch` role |
+## 2. Prepare Your Server
 
-## 3. Initial Configuration (`/impersonation-setup`)
+Before running the setup command, make sure you have:
 
-Run the slash command once per guild as an administrator:
+| Item | Purpose |
+|------|---------|
+| **Moderation channel** | Where impersonation alerts should be posted (text channel visible to staff). |
+| **Quarantine role (optional)** | Role to assign automatically to suspicious users. Remove message/reaction permissions. |
+| **Trusted roles list** | Roles that should bypass detection (e.g. Discord’s built-in `Twitch` role, manually verified streamers). |
+
+## 3. Initial Setup (`/impersonation-setup`)
+
+Run the command once per server (requires “Administrator” permission):
 
 ```
 /impersonation-setup \
   enabled:true \
-  moderation_channel:#moderation \
+  moderation_channel:#mod-chat \
   min_score:70 \
   auto_quarantine:true \
   quarantine_role:@Quarantine \
@@ -38,55 +39,71 @@ Run the slash command once per guild as an administrator:
   trusted_roles:@Twitch,@Partner
 ```
 
-Key fields:
+Field overview:
 
-- `enabled` – master switch for the detector
-- `moderation_channel` – where alerts appear
-- `min_score` – minimum risk score (40–100) required before alerts are created
-- `auto_quarantine` / `quarantine_role` – optional automatic containment
-- `auto_dm` – send instructions to flagged users
-- `trusted_roles` – comma-separated list of roles that should bypass detection
+- `enabled` – Master switch for the feature.
+- `moderation_channel` – Channel receiving rich alert embeds with action buttons.
+- `min_score` – Minimum risk score needed before alerts fire (40–100).
+- `auto_quarantine` / `quarantine_role` – Optional automatic containment.
+- `auto_dm` – Sends a DM with verification instructions to flagged users.
+- `trusted_roles` – Comma-separated roles that mark members as “already verified”.
 
-## 4. Ongoing Configuration (`/impersonation-config`)
+## 4. Tune Settings (`/impersonation-config`)
 
-Use `/impersonation-config` to tweak individual settings without running the
-full setup again. Examples:
+Need to change thresholds later? Use the config command:
 
 ```
-/impersonation-config min_score:60
+/impersonation-config min_score:65
 /impersonation-config trusted_roles:@Twitch,@VIP
 ```
 
-## 5. Streamer Cache Management
+You can adjust any single field (channel, auto-quarantine, DM behavior, etc.)
+without rerunning the full setup.
 
-- **Auto-populate** – the service fetches likely Twitch profiles whenever it
-  cannot find a match in the cache. It uses rate-limited semaphore control to
-  avoid hitting Twitch limits.
-- **Manual refresh** – `/impersonation-cache-refresh` updates cached entries.
-- **Database health** – ensure `pg_trgm` stays enabled and the bot user owns the
-  `streamer_cache` tables/indexes so startup migrations succeed.
+## 5. Handling Alerts
 
-## 6. Reviewing Detections
+When the bot detects a suspicious account:
 
-| Command | Purpose |
-|---------|---------|
-| `/impersonation-review status:pending limit:25` | List newest detections |
-| `/impersonation-details user:@suspect` | Detailed breakdown + scores |
-| `/impersonation-stats period:7d` | Aggregated metrics |
-| `/impersonation-whitelist action:add user:@legit reason:"Manual verify"` | Suppress future alerts |
+1. It posts an embed in your moderation channel showing similarity scores,
+   account age, and Twitch info.
+2. Moderators can click the action buttons (quarantine, whitelist, dismiss) or
+   use slash commands for manual control.
+3. The bot stores results so you can review them later.
 
-Moderators can take action from the alert embed (buttons) or manually assign
-roles/kick users as needed.
+Useful commands:
+
+| Command | Description |
+|---------|-------------|
+| `/impersonation-review status:pending limit:25` | Shows recent detections awaiting review. |
+| `/impersonation-details user:@suspect` | Detailed breakdown of a single detection. |
+| `/impersonation-whitelist action:add user:@legit reason:"Verified"` | Suppress future alerts for a known good user. |
+| `/impersonation-cache-refresh` | Reload cached Twitch info (max 100 entries per run). |
+
+## 6. Best Practices
+
+- **Trusted roles:** Add Discord’s built-in `Twitch` role or any other verified
+  role so real streamers are never flagged.
+- **Moderation workflow:** Pin the alert embeds in your mod channel or route
+  them to a private staff category for easy access.
+- **Educate staff:** Share this guide with moderators so they know how to react
+  to alerts and mark false positives using `/impersonation-whitelist`.
+- **Webhook logging (optional):** Create a dedicated logging channel if you want
+  a permanent audit trail separate from the main moderation chat.
 
 ## 7. Troubleshooting
 
-- **No alerts** – confirm `/impersonation-config enabled:true` and that the
-  minimum score is ≤ 80.
-- **Database errors on startup** – ensure the bot user owns
-  `streamer_cache`/`impersonation_*` tables and can run the migrations.
-- **High log volume** – check `src/services/impersonation_detection_service`
-  for warnings; common causes are missing trusted roles or Twitch rate limits.
+- **No alerts:** Run `/impersonation-config` to confirm `enabled:true` and that
+  `min_score` isn’t set too high (start with 60–70).
+- **Too many alerts:** Raise `min_score`, add more trusted roles, or whitelist
+  recurring community members.
+- **“Bot lacks permissions” message:** Ensure the bot’s role is above the
+  quarantine/verified roles and has the required Discord permissions.
 
-Need more detail? See `IMPERSONATION_DETECTION.md` for the scoring model and
-architecture, or `IMPERSONATION_DETECTION.md` → *Handling Strategies* for alert
-automation ideas.
+### Need More Detail?
+- [Impersonation Detection System](IMPERSONATION_DETECTION.md): scoring,
+  algorithm internals, cache design.
+- [README](README.md): overall bot features and verification flow.
+
+You’re all set! Once `/impersonation-setup` completes, the bot will begin
+monitoring every new member (and daily batches) for suspicious Twitch lookalikes
+with zero additional maintenance.
