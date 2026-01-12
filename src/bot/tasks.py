@@ -1,5 +1,6 @@
 """Discord bot periodic tasks."""
 
+import asyncio
 import logging
 
 import discord
@@ -10,8 +11,12 @@ from src.database.connection import get_db_session
 from src.database.repositories import (
     GuildConfigRepository,
     OAuthSessionRepository,
+    StreamerCacheRepository,
     UserVerificationRepository,
     VerificationAuditLogRepository,
+)
+from src.services.impersonation_detection_service import (
+    impersonation_detection_service,
 )
 from src.services.verification_service import verification_service
 from src.shared.constants import AUDIT_ACTION_NICKNAME_UPDATED
@@ -290,6 +295,157 @@ def setup_tasks(bot: commands.Bot) -> None:
                 f"Error in role verification mismatch check: {e}", exc_info=True
             )
 
+    @tasks.loop(hours=24)
+    async def check_impersonation_daily():
+        """
+        Daily check for impersonation across all guild members.
+
+        Checks all members in configured guilds for potential impersonation attempts.
+        Runs at 2 AM UTC to avoid peak hours.
+        """
+        try:
+            # Get all guild configurations with impersonation detection enabled
+            async with get_db_session() as db_session:
+                guild_configs = await GuildConfigRepository.get_all(db_session)
+
+            if not guild_configs:
+                logger.debug("No guilds configured, skipping impersonation check")
+                return
+
+            # Filter guilds with impersonation detection enabled
+            enabled_guilds = [
+                gc for gc in guild_configs if gc.impersonation_detection_enabled
+            ]
+
+            if not enabled_guilds:
+                logger.debug(
+                    "No guilds with impersonation detection enabled, skipping check"
+                )
+                return
+
+            logger.info(
+                f"Starting daily impersonation check for {len(enabled_guilds)} guilds"
+            )
+
+            # Process each guild
+            for guild_config in enabled_guilds:
+                guild = bot.get_guild(guild_config.guild_id)
+                if not guild:
+                    logger.warning(
+                        f"Guild {guild_config.guild_id} not found (bot may have been removed)"
+                    )
+                    continue
+
+                logger.info(
+                    f"Checking impersonation in guild {guild.name} ({guild.id})"
+                )
+
+                # Get all members in batches
+                members = list(guild.members)
+                batch_size = 50
+                checked = 0
+                detected = 0
+
+                for i in range(0, len(members), batch_size):
+                    batch = members[i : i + batch_size]
+
+                    for member in batch:
+                        # Skip bots
+                        if member.bot:
+                            continue
+
+                        # Skip verified users (they're legitimate)
+                        async with get_db_session() as db_session:
+                            verification = await verification_service.get_verification_by_discord_id(
+                                db_session, member.id
+                            )
+                        if verification:
+                            continue
+
+                        # Check for impersonation
+                        async with get_db_session() as db_session:
+                            detection = (
+                                await impersonation_detection_service.check_user(
+                                    db_session,
+                                    member=member,
+                                    guild_id=guild.id,
+                                    guild_config=guild_config,
+                                    trigger="daily_check",
+                                )
+                            )
+
+                        if detection:
+                            detected += 1
+                            # Alert will be sent by the moderation service if configured
+                            logger.info(
+                                f"Detected potential impersonation: {member.name} (score: {detection['scores']['total_score']})"
+                            )
+
+                        checked += 1
+
+                    # Rate limit: wait between batches
+                    await asyncio.sleep(5)
+
+                logger.info(
+                    f"Completed impersonation check for {guild.name}: checked {checked} members, detected {detected}"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in daily impersonation check: {e}", exc_info=True)
+
+    @tasks.loop(hours=24)
+    async def refresh_streamer_cache():
+        """
+        Refresh stale streamer cache entries.
+
+        Updates cache entries older than 7 days with fresh data from Twitch API.
+        Runs every 24 hours.
+        """
+        try:
+            async with get_db_session() as db_session:
+                # Get stale cache entries (older than 7 days)
+                stale_entries = await StreamerCacheRepository.get_stale_entries(
+                    db_session, days_old=7
+                )
+
+            if not stale_entries:
+                logger.debug("No stale streamer cache entries found")
+                return
+
+            logger.info(f"Refreshing {len(stale_entries)} stale streamer cache entries")
+
+            # Refresh in batches (Twitch rate limit: 800 requests/min)
+            batch_size = 100
+            refreshed = 0
+            failed = 0
+
+            for i in range(0, len(stale_entries), batch_size):
+                batch = stale_entries[i : i + batch_size]
+
+                for entry in batch:
+                    async with get_db_session() as db_session:
+                        success = await impersonation_detection_service.refresh_streamer_cache(
+                            db_session, entry.twitch_user_id
+                        )
+
+                    if success:
+                        refreshed += 1
+                    else:
+                        failed += 1
+
+                    # Rate limiting (0.1s per request = max 600 req/min, well under 800 limit)
+                    await asyncio.sleep(0.1)
+
+                # Longer pause between batches
+                await asyncio.sleep(5)
+
+            logger.info(
+                f"Streamer cache refresh complete: {refreshed} refreshed, {failed} failed"
+            )
+
+        except Exception as e:
+            logger.error(f"Error in streamer cache refresh: {e}", exc_info=True)
+
     @enforce_nicknames.before_loop
     async def before_enforce_nicknames():
         """Wait until bot is ready before starting nickname enforcement task."""
@@ -308,9 +464,23 @@ def setup_tasks(bot: commands.Bot) -> None:
         await bot.wait_until_ready()
         logger.info("Starting role verification mismatch check task")
 
+    @check_impersonation_daily.before_loop
+    async def before_check_impersonation_daily():
+        """Wait until bot is ready before starting daily impersonation check."""
+        await bot.wait_until_ready()
+        logger.info("Starting daily impersonation check task")
+
+    @refresh_streamer_cache.before_loop
+    async def before_refresh_streamer_cache():
+        """Wait until bot is ready before starting streamer cache refresh."""
+        await bot.wait_until_ready()
+        logger.info("Starting streamer cache refresh task")
+
     # Start tasks
     enforce_nicknames.start()
     cleanup_expired_sessions.start()
     check_role_verification_mismatch.start()
+    check_impersonation_daily.start()
+    refresh_streamer_cache.start()
 
     logger.info("Periodic tasks registered and started")

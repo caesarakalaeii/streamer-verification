@@ -11,7 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import config
 from src.database.models import (
     GuildConfig,
+    ImpersonationDetection,
+    ImpersonationWhitelist,
     OAuthSession,
+    StreamerCache,
     UserVerification,
     VerificationAuditLog,
 )
@@ -396,4 +399,398 @@ class GuildConfigRepository:
         deleted: bool = result.rowcount > 0  # type: ignore[attr-defined]
         if deleted:
             logger.info(f"Deleted guild config for guild {guild_id}")
+        return deleted
+
+
+class StreamerCacheRepository:
+    """Repository for StreamerCache table."""
+
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        twitch_user_id: str,
+        twitch_username: str,
+        twitch_display_name: str | None = None,
+        follower_count: int = 0,
+        description: str | None = None,
+        has_discord_link: bool = False,
+        profile_image_url: str | None = None,
+    ) -> StreamerCache:
+        """Create a new streamer cache entry."""
+        cache_entry = StreamerCache(
+            twitch_user_id=twitch_user_id,
+            twitch_username=twitch_username,
+            twitch_display_name=twitch_display_name,
+            follower_count=follower_count,
+            description=description,
+            has_discord_link=has_discord_link,
+            profile_image_url=profile_image_url,
+            cached_at=datetime.utcnow(),
+            last_updated=datetime.utcnow(),
+        )
+        session.add(cache_entry)
+        try:
+            await session.flush()
+            logger.info(f"Created streamer cache entry for {twitch_username}")
+            return cache_entry
+        except IntegrityError as e:
+            await session.rollback()
+            logger.error(f"Integrity error creating streamer cache: {e}")
+            raise RecordAlreadyExistsError(
+                "Streamer cache entry already exists",
+                "This Twitch user is already cached.",
+            ) from e
+
+    @staticmethod
+    async def get_by_twitch_id(
+        session: AsyncSession, twitch_user_id: str
+    ) -> StreamerCache | None:
+        """Get streamer cache entry by Twitch user ID."""
+        result = await session.execute(
+            select(StreamerCache).where(StreamerCache.twitch_user_id == twitch_user_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_username(
+        session: AsyncSession, twitch_username: str
+    ) -> StreamerCache | None:
+        """Get streamer cache entry by Twitch username (case-insensitive)."""
+        result = await session.execute(
+            select(StreamerCache).where(
+                StreamerCache.twitch_username.ilike(twitch_username)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_all_cached(session: AsyncSession) -> Sequence[StreamerCache]:
+        """Get all cached streamers."""
+        result = await session.execute(select(StreamerCache))
+        return result.scalars().all()
+
+    @staticmethod
+    async def get_stale_entries(
+        session: AsyncSession, days_old: int = 7
+    ) -> Sequence[StreamerCache]:
+        """Get cache entries older than specified days."""
+        cutoff_date = datetime.utcnow() - timedelta(days=days_old)
+        result = await session.execute(
+            select(StreamerCache).where(StreamerCache.last_updated < cutoff_date)
+        )
+        return result.scalars().all()
+
+    @staticmethod
+    async def update(
+        session: AsyncSession,
+        twitch_user_id: str,
+        **kwargs,
+    ) -> StreamerCache | None:
+        """Update streamer cache entry."""
+        cache_entry = await StreamerCacheRepository.get_by_twitch_id(
+            session, twitch_user_id
+        )
+        if not cache_entry:
+            return None
+
+        for key, value in kwargs.items():
+            if hasattr(cache_entry, key):
+                setattr(cache_entry, key, value)
+
+        cache_entry.last_updated = datetime.utcnow()
+        await session.flush()
+        logger.info(f"Updated streamer cache for {cache_entry.twitch_username}")
+        return cache_entry
+
+    @staticmethod
+    async def increment_cache_hits(session: AsyncSession, twitch_user_id: str) -> None:
+        """Increment cache hit counter."""
+        await session.execute(
+            update(StreamerCache)
+            .where(StreamerCache.twitch_user_id == twitch_user_id)
+            .values(cache_hits=StreamerCache.cache_hits + 1)
+        )
+        await session.flush()
+
+
+class ImpersonationDetectionRepository:
+    """Repository for ImpersonationDetection table."""
+
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        guild_id: int,
+        discord_user_id: int,
+        discord_username: str,
+        discord_display_name: str | None,
+        discord_account_age_days: int,
+        discord_bio: str | None,
+        suspected_streamer_id: str,
+        suspected_streamer_username: str,
+        suspected_streamer_follower_count: int,
+        total_score: int,
+        username_similarity_score: int,
+        account_age_score: int,
+        bio_match_score: int,
+        streamer_popularity_score: int,
+        discord_absence_score: int,
+        risk_level: str,
+        detection_trigger: str | None = None,
+    ) -> ImpersonationDetection:
+        """Create a new impersonation detection record."""
+        detection = ImpersonationDetection(
+            guild_id=guild_id,
+            discord_user_id=discord_user_id,
+            discord_username=discord_username,
+            discord_display_name=discord_display_name,
+            discord_account_age_days=discord_account_age_days,
+            discord_bio=discord_bio,
+            suspected_streamer_id=suspected_streamer_id,
+            suspected_streamer_username=suspected_streamer_username,
+            suspected_streamer_follower_count=suspected_streamer_follower_count,
+            total_score=total_score,
+            username_similarity_score=username_similarity_score,
+            account_age_score=account_age_score,
+            bio_match_score=bio_match_score,
+            streamer_popularity_score=streamer_popularity_score,
+            discord_absence_score=discord_absence_score,
+            risk_level=risk_level,
+            detection_trigger=detection_trigger,
+            detected_at=datetime.utcnow(),
+        )
+        session.add(detection)
+        await session.flush()
+        logger.info(
+            f"Created impersonation detection for Discord user {discord_user_id} "
+            f"(suspected: {suspected_streamer_username}, score: {total_score})"
+        )
+        return detection
+
+    @staticmethod
+    async def get_by_id(
+        session: AsyncSession, detection_id: int
+    ) -> ImpersonationDetection | None:
+        """Get detection by ID."""
+        result = await session.execute(
+            select(ImpersonationDetection).where(
+                ImpersonationDetection.id == detection_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_user_and_guild(
+        session: AsyncSession, discord_user_id: int, guild_id: int
+    ) -> ImpersonationDetection | None:
+        """Get most recent detection for a user in a guild."""
+        result = await session.execute(
+            select(ImpersonationDetection)
+            .where(
+                ImpersonationDetection.discord_user_id == discord_user_id,
+                ImpersonationDetection.guild_id == guild_id,
+            )
+            .order_by(ImpersonationDetection.detected_at.desc())
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_pending_by_guild(
+        session: AsyncSession, guild_id: int, limit: int = 100
+    ) -> Sequence[ImpersonationDetection]:
+        """Get pending (unreviewed) detections for a guild."""
+        result = await session.execute(
+            select(ImpersonationDetection)
+            .where(
+                ImpersonationDetection.guild_id == guild_id,
+                ImpersonationDetection.status == "pending",
+            )
+            .order_by(
+                ImpersonationDetection.total_score.desc(),
+                ImpersonationDetection.detected_at.desc(),
+            )
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    @staticmethod
+    async def get_by_guild_and_status(
+        session: AsyncSession, guild_id: int, status: str, limit: int = 100
+    ) -> Sequence[ImpersonationDetection]:
+        """Get detections by guild and status."""
+        result = await session.execute(
+            select(ImpersonationDetection)
+            .where(
+                ImpersonationDetection.guild_id == guild_id,
+                ImpersonationDetection.status == status,
+            )
+            .order_by(ImpersonationDetection.detected_at.desc())
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    @staticmethod
+    async def update_status(
+        session: AsyncSession,
+        detection_id: int,
+        status: str,
+        reviewed_by_user_id: int,
+        reviewed_by_username: str,
+        moderator_action: str | None = None,
+        moderator_notes: str | None = None,
+    ) -> ImpersonationDetection | None:
+        """Update detection status after moderation."""
+        detection = await ImpersonationDetectionRepository.get_by_id(
+            session, detection_id
+        )
+        if not detection:
+            return None
+
+        detection.status = status
+        detection.reviewed_by_user_id = reviewed_by_user_id
+        detection.reviewed_by_username = reviewed_by_username
+        detection.reviewed_at = datetime.utcnow()
+        if moderator_action:
+            detection.moderator_action = moderator_action
+        if moderator_notes:
+            detection.moderator_notes = moderator_notes
+
+        await session.flush()
+        logger.info(
+            f"Updated detection {detection_id} status to {status} by {reviewed_by_username}"
+        )
+        return detection
+
+    @staticmethod
+    async def set_alert_message_id(
+        session: AsyncSession, detection_id: int, message_id: int
+    ) -> None:
+        """Set the alert message ID for a detection."""
+        await session.execute(
+            update(ImpersonationDetection)
+            .where(ImpersonationDetection.id == detection_id)
+            .values(alert_message_id=message_id)
+        )
+        await session.flush()
+
+    @staticmethod
+    async def get_stats(
+        session: AsyncSession, guild_id: int, days: int = 7
+    ) -> dict[str, int]:
+        """Get detection statistics for a guild."""
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+
+        # Get total detections
+        total_result = await session.execute(
+            select(ImpersonationDetection).where(
+                ImpersonationDetection.guild_id == guild_id,
+                ImpersonationDetection.detected_at >= cutoff_date,
+            )
+        )
+        total = len(total_result.scalars().all())
+
+        # Get pending count
+        pending_result = await session.execute(
+            select(ImpersonationDetection).where(
+                ImpersonationDetection.guild_id == guild_id,
+                ImpersonationDetection.status == "pending",
+            )
+        )
+        pending = len(pending_result.scalars().all())
+
+        # Get actions taken
+        actioned_result = await session.execute(
+            select(ImpersonationDetection).where(
+                ImpersonationDetection.guild_id == guild_id,
+                ImpersonationDetection.detected_at >= cutoff_date,
+                ImpersonationDetection.moderator_action.isnot(None),
+            )
+        )
+        actioned = len(actioned_result.scalars().all())
+
+        return {
+            "total_detections": total,
+            "pending_reviews": pending,
+            "actions_taken": actioned,
+        }
+
+
+class ImpersonationWhitelistRepository:
+    """Repository for ImpersonationWhitelist table."""
+
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        guild_id: int,
+        discord_user_id: int,
+        discord_username: str,
+        added_by_user_id: int,
+        added_by_username: str,
+        reason: str | None = None,
+    ) -> ImpersonationWhitelist:
+        """Add a user to the whitelist."""
+        whitelist_entry = ImpersonationWhitelist(
+            guild_id=guild_id,
+            discord_user_id=discord_user_id,
+            discord_username=discord_username,
+            reason=reason,
+            added_by_user_id=added_by_user_id,
+            added_by_username=added_by_username,
+        )
+        session.add(whitelist_entry)
+        try:
+            await session.flush()
+            logger.info(
+                f"Added Discord user {discord_user_id} to whitelist in guild {guild_id}"
+            )
+            return whitelist_entry
+        except IntegrityError as e:
+            await session.rollback()
+            logger.error(f"Integrity error creating whitelist entry: {e}")
+            raise RecordAlreadyExistsError(
+                "User already whitelisted",
+                "This user is already on the whitelist for this server.",
+            ) from e
+
+    @staticmethod
+    async def is_whitelisted(
+        session: AsyncSession, discord_user_id: int, guild_id: int
+    ) -> bool:
+        """Check if a user is whitelisted in a guild."""
+        result = await session.execute(
+            select(ImpersonationWhitelist).where(
+                ImpersonationWhitelist.discord_user_id == discord_user_id,
+                ImpersonationWhitelist.guild_id == guild_id,
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+    @staticmethod
+    async def get_by_guild(
+        session: AsyncSession, guild_id: int
+    ) -> Sequence[ImpersonationWhitelist]:
+        """Get all whitelisted users for a guild."""
+        result = await session.execute(
+            select(ImpersonationWhitelist)
+            .where(ImpersonationWhitelist.guild_id == guild_id)
+            .order_by(ImpersonationWhitelist.created_at.desc())
+        )
+        return result.scalars().all()
+
+    @staticmethod
+    async def delete(
+        session: AsyncSession, discord_user_id: int, guild_id: int
+    ) -> bool:
+        """Remove a user from the whitelist. Returns True if deleted, False if not found."""
+        result = await session.execute(
+            delete(ImpersonationWhitelist).where(
+                ImpersonationWhitelist.discord_user_id == discord_user_id,
+                ImpersonationWhitelist.guild_id == guild_id,
+            )
+        )
+        await session.flush()
+        deleted: bool = result.rowcount > 0  # type: ignore[attr-defined]
+        if deleted:
+            logger.info(
+                f"Removed Discord user {discord_user_id} from whitelist in guild {guild_id}"
+            )
         return deleted

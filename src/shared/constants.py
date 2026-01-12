@@ -9,6 +9,15 @@ AUDIT_ACTION_NICKNAME_UPDATED = "nickname_updated"
 AUDIT_ACTION_DISCORD_OAUTH_COMPLETED = "discord_oauth_completed"
 AUDIT_ACTION_TWITCH_OAUTH_COMPLETED = "twitch_oauth_completed"
 
+# Impersonation Detection Audit Actions
+AUDIT_ACTION_IMPERSONATION_DETECTED = "impersonation_detected"
+AUDIT_ACTION_IMPERSONATION_BANNED = "impersonation_banned"
+AUDIT_ACTION_IMPERSONATION_KICKED = "impersonation_kicked"
+AUDIT_ACTION_IMPERSONATION_WARNED = "impersonation_warned"
+AUDIT_ACTION_IMPERSONATION_MARKED_SAFE = "impersonation_marked_safe"
+AUDIT_ACTION_IMPERSONATION_FALSE_POSITIVE = "impersonation_false_positive"
+AUDIT_ACTION_IMPERSONATION_WHITELISTED = "impersonation_whitelisted"
+
 # OAuth Configuration
 DISCORD_OAUTH_SCOPES = [
     "identify",
@@ -26,6 +35,8 @@ DISCORD_USERS_ME = f"{DISCORD_API_BASE}/users/@me"
 TWITCH_OAUTH_AUTHORIZE = "https://id.twitch.tv/oauth2/authorize"
 TWITCH_OAUTH_TOKEN = "https://id.twitch.tv/oauth2/token"
 TWITCH_HELIX_USERS = "https://api.twitch.tv/helix/users"
+TWITCH_HELIX_CHANNELS = "https://api.twitch.tv/helix/channels"
+TWITCH_HELIX_FOLLOWERS = "https://api.twitch.tv/helix/channels/followers"
 
 # Error Messages
 ERROR_TOKEN_EXPIRED = "Your verification link has expired. Please run /verify again."

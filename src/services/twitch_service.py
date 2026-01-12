@@ -1,12 +1,14 @@
 """Twitch OAuth API client service."""
 
 import logging
+import re
 from typing import Any
 
 import httpx
 
 from src.config import config
 from src.shared.constants import (
+    TWITCH_HELIX_FOLLOWERS,
     TWITCH_HELIX_USERS,
     TWITCH_OAUTH_AUTHORIZE,
     TWITCH_OAUTH_SCOPES,
@@ -164,6 +166,229 @@ class TwitchService:
                 f"Twitch API request failed: {e}",
                 "Failed to connect to Twitch. Please try again.",
             ) from e
+
+    @staticmethod
+    async def get_app_access_token() -> str:
+        """
+        Get an app access token for API calls that don't require user authentication.
+
+        Returns:
+            App access token
+
+        Raises:
+            TwitchAPIError: Failed to get app token
+        """
+        data = {
+            "client_id": config.twitch_client_id,
+            "client_secret": config.twitch_client_secret,
+            "grant_type": "client_credentials",
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    TWITCH_OAUTH_TOKEN,
+                    data=data,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    timeout=10.0,
+                )
+
+                if response.status_code != 200:
+                    error_data = response.json() if response.content else {}
+                    logger.error(
+                        f"Twitch app token failed: {response.status_code}, {error_data}"
+                    )
+                    raise TwitchAPIError(
+                        f"Failed to get app token: {response.status_code}",
+                        "Failed to authenticate with Twitch API.",
+                    )
+
+                token_data = response.json()
+                access_token = token_data.get("access_token")
+
+                if not access_token:
+                    logger.error(f"No access token in Twitch response: {token_data}")
+                    raise TwitchAPIError(
+                        "No access token in response",
+                        "Failed to authenticate with Twitch API.",
+                    )
+
+                logger.debug("Successfully obtained Twitch app access token")
+                return str(access_token)
+
+        except httpx.RequestError as e:
+            logger.error(f"Twitch API request error: {e}")
+            raise TwitchAPIError(
+                f"Twitch API request failed: {e}",
+                "Failed to connect to Twitch API.",
+            ) from e
+
+    @staticmethod
+    async def get_user_profile(
+        user_id: str | None = None, username: str | None = None
+    ) -> dict[str, Any]:
+        """
+        Get full user profile including description, profile image, etc.
+
+        Args:
+            user_id: Twitch user ID (optional)
+            username: Twitch username (optional)
+            At least one must be provided.
+
+        Returns:
+            User profile dict with 'id', 'login', 'display_name', 'description', etc.
+
+        Raises:
+            TwitchAPIError: Failed to fetch profile
+        """
+        if not user_id and not username:
+            raise TwitchAPIError(
+                "Must provide user_id or username",
+                "Invalid request to Twitch API.",
+            )
+
+        # Get app access token
+        app_token = await TwitchService.get_app_access_token()
+
+        headers = {
+            "Authorization": f"Bearer {app_token}",
+            "Client-Id": config.twitch_client_id,
+        }
+
+        # Build query params
+        params = {}
+        if user_id:
+            params["id"] = user_id
+        if username:
+            params["login"] = username
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    TWITCH_HELIX_USERS,
+                    headers=headers,
+                    params=params,
+                    timeout=10.0,
+                )
+
+                if response.status_code != 200:
+                    error_data = response.json() if response.content else {}
+                    logger.error(
+                        f"Twitch profile fetch failed: {response.status_code}, {error_data}"
+                    )
+                    raise TwitchAPIError(
+                        f"Failed to fetch profile: {response.status_code}",
+                        "Failed to fetch Twitch profile.",
+                    )
+
+                response_data = response.json()
+                data = response_data.get("data", [])
+
+                if not data:
+                    logger.warning(
+                        f"No user found for user_id={user_id}, username={username}"
+                    )
+                    raise TwitchAPIError(
+                        "User not found",
+                        "Twitch user not found.",
+                    )
+
+                user_data: dict[str, Any] = data[0]
+                logger.debug(
+                    f"Fetched Twitch profile: {user_data.get('id')} ({user_data.get('login')})"
+                )
+                return user_data
+
+        except httpx.RequestError as e:
+            logger.error(f"Twitch API request error: {e}")
+            raise TwitchAPIError(
+                f"Twitch API request failed: {e}",
+                "Failed to connect to Twitch API.",
+            ) from e
+
+    @staticmethod
+    async def get_follower_count(user_id: str) -> int:
+        """
+        Get follower count for a Twitch user.
+
+        Args:
+            user_id: Twitch user ID
+
+        Returns:
+            Follower count
+
+        Raises:
+            TwitchAPIError: Failed to fetch follower count
+        """
+        # Get app access token
+        app_token = await TwitchService.get_app_access_token()
+
+        headers = {
+            "Authorization": f"Bearer {app_token}",
+            "Client-Id": config.twitch_client_id,
+        }
+
+        params = {"broadcaster_id": user_id, "first": 1}
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    TWITCH_HELIX_FOLLOWERS,
+                    headers=headers,
+                    params=params,
+                    timeout=10.0,
+                )
+
+                if response.status_code != 200:
+                    error_data = response.json() if response.content else {}
+                    logger.error(
+                        f"Twitch follower count failed: {response.status_code}, {error_data}"
+                    )
+                    raise TwitchAPIError(
+                        f"Failed to get follower count: {response.status_code}",
+                        "Failed to fetch follower count.",
+                    )
+
+                response_data = response.json()
+                total = response_data.get("total", 0)
+
+                logger.debug(f"Fetched follower count for {user_id}: {total}")
+                return int(total)
+
+        except httpx.RequestError as e:
+            logger.error(f"Twitch API request error: {e}")
+            raise TwitchAPIError(
+                f"Twitch API request failed: {e}",
+                "Failed to connect to Twitch API.",
+            ) from e
+
+    @staticmethod
+    def has_discord_link(description: str | None) -> bool:
+        """
+        Check if a description contains Discord links.
+
+        Args:
+            description: User/channel description
+
+        Returns:
+            True if Discord link found, False otherwise
+        """
+        if not description:
+            return False
+
+        # Common Discord link patterns
+        discord_patterns = [
+            r"discord\.gg/[\w-]+",  # discord.gg/invite
+            r"discord\.com/invite/[\w-]+",  # discord.com/invite/code
+            r"discordapp\.com/invite/[\w-]+",  # discordapp.com/invite/code
+        ]
+
+        description_lower = description.lower()
+        for pattern in discord_patterns:
+            if re.search(pattern, description_lower):
+                return True
+
+        return False
 
 
 # Global instance

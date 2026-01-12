@@ -13,6 +13,9 @@ def create_bot() -> commands.Bot:
     intents = discord.Intents.default()
     intents.members = True  # Required for member events and nickname management
     intents.guilds = True
+    intents.presences = (
+        True  # Required for accessing user bios/about me (impersonation detection)
+    )
 
     bot = commands.Bot(
         command_prefix="!",  # Prefix for text commands (not used for slash commands)
@@ -31,6 +34,12 @@ def create_bot() -> commands.Bot:
             logger.info(
                 f"  - {guild.name} (ID: {guild.id}, Members: {guild.member_count})"
             )
+
+        # Register persistent views (for K8s restart support)
+        from src.bot.interactions import ImpersonationAlertView
+
+        bot.add_view(ImpersonationAlertView())
+        logger.info("Registered persistent impersonation alert view")
 
         # Sync slash commands globally
         try:
@@ -66,10 +75,12 @@ def create_bot() -> commands.Bot:
 
     # Register cogs/commands
     from src.bot.commands import setup_commands
+    from src.bot.commands_impersonation import setup_impersonation_commands
     from src.bot.events import setup_events
     from src.bot.tasks import setup_tasks
 
     setup_commands(bot)
+    setup_impersonation_commands(bot)
     setup_events(bot)
     setup_tasks(bot)
 
