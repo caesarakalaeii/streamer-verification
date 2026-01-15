@@ -621,9 +621,23 @@ class ImpersonationDetectionService:
         return hash_value
 
     @staticmethod
+    def _to_signed_hash(hash_value: int) -> int:
+        """Convert an unsigned 64-bit hash to a signed int64 for storage."""
+        if hash_value >= (1 << 63):
+            return hash_value - (1 << 64)
+        return hash_value
+
+    @staticmethod
+    def _to_unsigned_hash(hash_value: int) -> int:
+        """Convert a signed int64 hash to an unsigned 64-bit value."""
+        return hash_value & ((1 << 64) - 1)
+
+    @staticmethod
     def _calculate_avatar_similarity(hash_a: int, hash_b: int) -> float:
         """Return similarity score (0-100) based on dHash Hamming distance."""
-        distance = (hash_a ^ hash_b).bit_count()
+        unsigned_a = ImpersonationDetectionService._to_unsigned_hash(hash_a)
+        unsigned_b = ImpersonationDetectionService._to_unsigned_hash(hash_b)
+        distance = (unsigned_a ^ unsigned_b).bit_count()
         similarity = (1 - (distance / 64)) * 100
         return max(0.0, float(round(similarity, 2)))
 
@@ -673,7 +687,11 @@ class ImpersonationDetectionService:
                     profile_image_url != existing.profile_image_url
                     or profile_image_hash is None
                 ):
-                    profile_image_hash = await self._get_avatar_hash(profile_image_url)
+                    avatar_hash = await self._get_avatar_hash(profile_image_url)
+                    if avatar_hash is not None:
+                        profile_image_hash = self._to_signed_hash(avatar_hash)
+                    else:
+                        profile_image_hash = None
 
                 await StreamerCacheRepository.update(
                     db_session,
@@ -691,7 +709,9 @@ class ImpersonationDetectionService:
                 profile_image_url = profile.get("profile_image_url")
                 profile_image_hash = None
                 if profile_image_url:
-                    profile_image_hash = await self._get_avatar_hash(profile_image_url)
+                    avatar_hash = await self._get_avatar_hash(profile_image_url)
+                    if avatar_hash is not None:
+                        profile_image_hash = self._to_signed_hash(avatar_hash)
                 await StreamerCacheRepository.create(
                     db_session,
                     twitch_user_id=twitch_user_id,
@@ -810,9 +830,9 @@ class ImpersonationDetectionService:
                     )
                     profile_image_hash = None
                     if profile_image_url:
-                        profile_image_hash = await self._get_avatar_hash(
-                            profile_image_url
-                        )
+                        avatar_hash = await self._get_avatar_hash(profile_image_url)
+                        if avatar_hash is not None:
+                            profile_image_hash = self._to_signed_hash(avatar_hash)
                     await StreamerCacheRepository.create(
                         db_session,
                         twitch_user_id=twitch_user_id,
