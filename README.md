@@ -1,10 +1,13 @@
-# Discord-Twitch Verification Bot (Linked Roles)
+# Streamer Verification & Impersonation Detection Bot
 
-A Python-based Discord bot that uses **Discord Linked Roles** to securely verify users via Twitch OAuth, automatically sets their Discord nickname to their Twitch username, and periodically enforces these nicknames.
+A Python-based Discord bot focused on **impersonation detection** for Twitch streamers, with Linked Roles verification as the trusted signal that powers high-confidence alerts.
 
 ## Recent Updates
 
 ### Latest Changes
+- 🆕 **Avatar Match Signal**: Perceptual hash matching between Discord avatars and Twitch profile images
+  - Cached on the streamer side to avoid extra Twitch calls
+  - Only checked for strong username matches to limit Discord CDN usage
 - ✨ **New `/whois` Command**: Look up any Discord user's verified Twitch name
   - Works in DMs and servers
   - Privacy-focused: One-way lookup only (Discord → Twitch, not reverse)
@@ -21,6 +24,10 @@ A Python-based Discord bot that uses **Discord Linked Roles** to securely verify
 
 ## Features
 
+- ✅ **Impersonation Detection (Primary)**: Multi-signal scoring with alerts, quarantine, and auto-DM
+- ✅ **Trusted Signals**: Verified Twitch links and trusted roles prevent false positives
+- ✅ **Avatar Matching**: Optional visual match scoring to confirm high-similarity cases
+- ✅ **Streamer Cache**: Trigram search + TTL refresh for fast, scalable lookups
 - ✅ **Multi-Server Support**: Add to any server - each has its own configuration
 - ✅ **User Install Support**: Users can add the bot directly to their account (no server required)
 - ✅ **Zero Redeployment**: No code changes needed to add new servers
@@ -39,6 +46,19 @@ A Python-based Discord bot that uses **Discord Linked Roles** to securely verify
 - ✅ **CI/CD Pipeline**: GitHub Actions for automated testing and deployment
 
 ## How It Works
+
+### 🎯 Primary Goal: Impersonation Detection
+
+The detection system flags unverified users who closely match Twitch streamers by:
+- Username similarity (Levenshtein + Jaro-Winkler + pattern rules)
+- Account age and bio match signals
+- Streamer popularity targeting
+- Discord link absence
+- Optional avatar similarity for high-confidence cases
+
+Start here:
+- [Impersonation Detection Setup Guide](IMPERSONATION_SETUP_GUIDE.md)
+- [Detection Scoring Model](IMPERSONATION_DETECTION.md)
 
 ### 🌟 Verify Once, Works Everywhere
 
@@ -343,15 +363,6 @@ You can add this bot directly to your Discord account without joining any server
 This lets you look up any Discord user's verified Twitch name without needing server permissions.
 
 #### `/whois @user`
-
-## Impersonation Detection
-
-- **Server owners**: follow the
-  [Impersonation Detection Setup Guide](IMPERSONATION_SETUP_GUIDE.md) to install
-  the public bot, run `/impersonation-setup`, and manage alerts.
-- **Want details?** Read
-  [IMPERSONATION_DETECTION.md](IMPERSONATION_DETECTION.md) for the scoring model
-  and architecture.
 Look up a Discord user's verified Twitch name (available to everyone).
 
 ```
@@ -363,6 +374,15 @@ Look up a Discord user's verified Twitch name (available to everyone).
 - ✅ **Works in DMs**: No server required when user-installed
 - ✅ **Works in servers**: Also available in any server with the bot
 - ✅ **Ephemeral responses**: Results only visible to you
+
+## Impersonation Detection
+
+- **Server owners**: follow the
+  [Impersonation Detection Setup Guide](IMPERSONATION_SETUP_GUIDE.md) to install
+  the public bot, run `/impersonation-setup`, and manage alerts.
+- **Want details?** Read
+  [IMPERSONATION_DETECTION.md](IMPERSONATION_DETECTION.md) for the scoring model
+  and architecture.
 
 ### For Server Admins
 
