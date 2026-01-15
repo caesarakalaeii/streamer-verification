@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Sequence
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -622,8 +623,9 @@ class ImpersonationDetectionRepository:
         risk_level: str,
         detection_trigger: str | None = None,
     ) -> ImpersonationDetection:
-        """Create a new impersonation detection record."""
-        detection = ImpersonationDetection(
+        """Create or update an impersonation detection record per Discord user."""
+        detected_at = datetime.utcnow()
+        insert_stmt = insert(ImpersonationDetection).values(
             guild_id=guild_id,
             discord_user_id=discord_user_id,
             discord_username=discord_username,
@@ -642,13 +644,59 @@ class ImpersonationDetectionRepository:
             avatar_match_score=avatar_match_score,
             risk_level=risk_level,
             detection_trigger=detection_trigger,
-            detected_at=datetime.utcnow(),
+            detected_at=detected_at,
+            status="pending",
+            reviewed_by_user_id=None,
+            reviewed_by_username=None,
+            reviewed_at=None,
+            moderator_action=None,
+            moderator_notes=None,
+            alert_message_id=None,
+            created_at=detected_at,
+            updated_at=detected_at,
         )
-        session.add(detection)
+
+        upsert_stmt = insert_stmt.on_conflict_do_update(
+            index_elements=[ImpersonationDetection.discord_user_id],
+            set_={
+                "guild_id": guild_id,
+                "discord_username": discord_username,
+                "discord_display_name": discord_display_name,
+                "discord_account_age_days": discord_account_age_days,
+                "discord_bio": discord_bio,
+                "suspected_streamer_id": suspected_streamer_id,
+                "suspected_streamer_username": suspected_streamer_username,
+                "suspected_streamer_follower_count": suspected_streamer_follower_count,
+                "total_score": total_score,
+                "username_similarity_score": username_similarity_score,
+                "account_age_score": account_age_score,
+                "bio_match_score": bio_match_score,
+                "streamer_popularity_score": streamer_popularity_score,
+                "discord_absence_score": discord_absence_score,
+                "avatar_match_score": avatar_match_score,
+                "risk_level": risk_level,
+                "detection_trigger": detection_trigger,
+                "detected_at": detected_at,
+                "status": "pending",
+                "reviewed_by_user_id": None,
+                "reviewed_by_username": None,
+                "reviewed_at": None,
+                "moderator_action": None,
+                "moderator_notes": None,
+                "alert_message_id": None,
+                "updated_at": detected_at,
+            },
+        ).returning(ImpersonationDetection)
+
+        result = await session.execute(upsert_stmt)
+        detection = result.scalar_one()
         await session.flush()
         logger.info(
-            f"Created impersonation detection for Discord user {discord_user_id} "
-            f"(suspected: {suspected_streamer_username}, score: {total_score})"
+            "Upserted impersonation detection for Discord user %s "
+            "(suspected: %s, score: %s)",
+            discord_user_id,
+            suspected_streamer_username,
+            total_score,
         )
         return detection
 
