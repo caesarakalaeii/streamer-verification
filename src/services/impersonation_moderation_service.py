@@ -105,6 +105,10 @@ class ImpersonationModerationService:
             indicators.append(
                 f"• No Discord Link: {detection.discord_absence_score}/10"
             )
+        if detection.avatar_match_score > 0:
+            indicators.append(
+                f"• Avatar Match: {detection.avatar_match_score}/10"
+            )
 
         if indicators:
             embed.add_field(

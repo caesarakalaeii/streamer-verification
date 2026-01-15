@@ -19,3 +19,4 @@ python-dotenv==1.2.1
 # String Similarity (for impersonation detection)
 Levenshtein==0.27.3
 rapidfuzz==3.14.3
+Pillow==10.4.0

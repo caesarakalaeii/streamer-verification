@@ -188,6 +188,7 @@ class StreamerCache(Base):
         Boolean, default=False, nullable=False
     )
     profile_image_url: Mapped[str | None] = mapped_column(String(512))
+    profile_image_hash: Mapped[int | None] = mapped_column(BigInteger)
 
     # Cache metadata
     cached_at: Mapped[datetime] = mapped_column(
@@ -243,6 +244,7 @@ class ImpersonationDetection(Base):
     bio_match_score: Mapped[int] = mapped_column(Integer, nullable=False)
     streamer_popularity_score: Mapped[int] = mapped_column(Integer, nullable=False)
     discord_absence_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    avatar_match_score: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     risk_level: Mapped[str] = mapped_column(String(20), nullable=False)
 
     # Detection metadata

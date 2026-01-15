@@ -415,6 +415,7 @@ class StreamerCacheRepository:
         description: str | None = None,
         has_discord_link: bool = False,
         profile_image_url: str | None = None,
+        profile_image_hash: int | None = None,
     ) -> StreamerCache:
         """Create a new streamer cache entry."""
         cache_entry = StreamerCache(
@@ -425,6 +426,7 @@ class StreamerCacheRepository:
             description=description,
             has_discord_link=has_discord_link,
             profile_image_url=profile_image_url,
+            profile_image_hash=profile_image_hash,
             cached_at=datetime.utcnow(),
             last_updated=datetime.utcnow(),
         )
@@ -616,6 +618,7 @@ class ImpersonationDetectionRepository:
         bio_match_score: int,
         streamer_popularity_score: int,
         discord_absence_score: int,
+        avatar_match_score: int,
         risk_level: str,
         detection_trigger: str | None = None,
     ) -> ImpersonationDetection:
@@ -636,6 +639,7 @@ class ImpersonationDetectionRepository:
             bio_match_score=bio_match_score,
             streamer_popularity_score=streamer_popularity_score,
             discord_absence_score=discord_absence_score,
+            avatar_match_score=avatar_match_score,
             risk_level=risk_level,
             detection_trigger=detection_trigger,
             detected_at=datetime.utcnow(),

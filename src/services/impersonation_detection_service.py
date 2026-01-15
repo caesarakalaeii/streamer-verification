@@ -1,13 +1,16 @@
 """Impersonation detection service for identifying potential streamer impersonators."""
 
 import asyncio
+import io
 import logging
 import re
 from datetime import datetime, timezone
 from typing import TypedDict
 
 import discord
+import httpx
 import Levenshtein
+from PIL import Image
 from rapidfuzz import fuzz
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +36,7 @@ class ScoreDict(TypedDict):
     bio_match_score: int
     streamer_popularity_score: int
     discord_absence_score: int
+    avatar_match_score: int
     risk_level: str
 
 
@@ -42,9 +46,12 @@ class ImpersonationDetectionService:
     def __init__(self):
         """Initialize the service with caching."""
         self.min_similarity_threshold = 65.0  # Only check if >65% similar
+        self.avatar_similarity_threshold = 85.0  # Only compare avatars above this
         self._similarity_cache: dict[tuple[str, str], float] = (
             {}
         )  # Manual cache to avoid lru_cache memory leak
+        self._avatar_hash_cache: dict[str, int] = {}
+        self._avatar_hash_cache_limit = 2000
         self._auto_populate_semaphore = asyncio.Semaphore(
             5
         )  # Max 5 concurrent auto-populate operations
@@ -205,6 +212,40 @@ class ImpersonationDetectionService:
                         f"After auto-populate: best score {best_score} for {member.name}"
                     )
 
+            if best_match is None:
+                logger.debug(
+                    f"User {member.id} has no matching streamer candidates, skipping"
+                )
+                return None
+
+            matched_streamer: StreamerCache = best_match["streamer"]  # type: ignore[assignment]
+            matched_scores: ScoreDict = best_match["scores"]  # type: ignore[assignment]
+
+            # Optional avatar comparison (only for strong username matches)
+            avatar_similarity = 0.0
+            if (
+                best_match["similarity"] >= self.avatar_similarity_threshold
+                and matched_streamer.profile_image_hash is not None
+                and self._is_custom_avatar(member)
+            ):
+                avatar_url = member.display_avatar.with_size(128).url
+                discord_hash = await self._get_avatar_hash(avatar_url)
+                if discord_hash is not None:
+                    avatar_similarity = self._calculate_avatar_similarity(
+                        discord_hash, matched_streamer.profile_image_hash
+                    )
+
+            if avatar_similarity > 0:
+                matched_scores = self._calculate_score(
+                    username_similarity=best_match["similarity"],
+                    account_age_days=account_age_days,
+                    bio_similarity=best_match["bio_similarity"],
+                    follower_count=matched_streamer.follower_count,
+                    has_discord_link=matched_streamer.has_discord_link,
+                    avatar_similarity=avatar_similarity,
+                )
+                best_score = matched_scores["total_score"]
+
             # If best score is below 40, not suspicious enough to report
             if best_score < 40 or best_match is None:
                 logger.debug(
@@ -213,8 +254,6 @@ class ImpersonationDetectionService:
                 return None
 
             # Create detection record
-            matched_streamer: StreamerCache = best_match["streamer"]  # type: ignore[assignment]
-            matched_scores: ScoreDict = best_match["scores"]  # type: ignore[assignment]
 
             detection = await ImpersonationDetectionRepository.create(
                 db_session,
@@ -233,6 +272,7 @@ class ImpersonationDetectionService:
                 bio_match_score=matched_scores["bio_match_score"],
                 streamer_popularity_score=matched_scores["streamer_popularity_score"],
                 discord_absence_score=matched_scores["discord_absence_score"],
+                avatar_match_score=matched_scores["avatar_match_score"],
                 risk_level=matched_scores["risk_level"],
                 detection_trigger=trigger,
             )
@@ -397,6 +437,7 @@ class ImpersonationDetectionService:
         bio_similarity: float,
         follower_count: int,
         has_discord_link: bool,
+        avatar_similarity: float = 0.0,
     ) -> ScoreDict:
         """
         Calculate component scores and total score.
@@ -455,9 +496,22 @@ class ImpersonationDetectionService:
         # Discord Server Absence Score (0-10 points)
         discord_score = 0 if has_discord_link else 10
 
+        # Avatar Match Score (0-10 points)
+        if avatar_similarity >= 90:
+            avatar_score = 10
+        elif avatar_similarity >= 80:
+            avatar_score = 5
+        else:
+            avatar_score = 0
+
         # Calculate total
         total_score = (
-            username_score + age_score + bio_score + popularity_score + discord_score
+            username_score
+            + age_score
+            + bio_score
+            + popularity_score
+            + discord_score
+            + avatar_score
         )
 
         # Determine risk level
@@ -477,8 +531,86 @@ class ImpersonationDetectionService:
             "bio_match_score": bio_score,
             "streamer_popularity_score": popularity_score,
             "discord_absence_score": discord_score,
+            "avatar_match_score": avatar_score,
             "risk_level": risk_level,
         }
+
+    @staticmethod
+    def _is_custom_avatar(member: discord.Member) -> bool:
+        """Return True if the member has a custom avatar."""
+        return member.avatar is not None or member.guild_avatar is not None
+
+    async def _get_avatar_hash(self, url: str) -> int | None:
+        """Fetch and hash an avatar image, with a small in-memory cache."""
+        cached = self._avatar_hash_cache.get(url)
+        if cached is not None:
+            return cached
+
+        image_bytes = await self._fetch_image_bytes(url)
+        if not image_bytes:
+            return None
+
+        avatar_hash = self._compute_dhash(image_bytes)
+        if avatar_hash is None:
+            return None
+
+        self._avatar_hash_cache[url] = avatar_hash
+        if len(self._avatar_hash_cache) > self._avatar_hash_cache_limit:
+            for _ in range(200):
+                self._avatar_hash_cache.pop(next(iter(self._avatar_hash_cache)))
+
+        return avatar_hash
+
+    @staticmethod
+    async def _fetch_image_bytes(url: str, max_bytes: int = 2_000_000) -> bytes | None:
+        """Fetch image bytes with a size guard to avoid large downloads."""
+        try:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(url, timeout=5.0)
+            if response.status_code != 200:
+                return None
+            content_length = response.headers.get("content-length")
+            if content_length:
+                try:
+                    if int(content_length) > max_bytes:
+                        return None
+                except ValueError:
+                    pass
+            if len(response.content) > max_bytes:
+                return None
+            if not response.headers.get("content-type", "").startswith("image/"):
+                return None
+            return response.content
+        except Exception:
+            return None
+
+    @staticmethod
+    def _compute_dhash(image_bytes: bytes) -> int | None:
+        """Compute a 64-bit difference hash for an image."""
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as image:
+                gray = image.convert("L")
+                resized = gray.resize((9, 8), Image.Resampling.LANCZOS)
+                pixels = list(resized.getdata())
+        except Exception:
+            return None
+
+        hash_value = 0
+        for row in range(8):
+            row_start = row * 9
+            for col in range(8):
+                left = pixels[row_start + col]
+                right = pixels[row_start + col + 1]
+                hash_value = (hash_value << 1) | (1 if left > right else 0)
+
+        return hash_value
+
+    @staticmethod
+    def _calculate_avatar_similarity(hash_a: int, hash_b: int) -> float:
+        """Return similarity score (0-100) based on dHash Hamming distance."""
+        distance = (hash_a ^ hash_b).bit_count()
+        similarity = (1 - (distance / 64)) * 100
+        return max(0.0, float(round(similarity, 2)))
 
     async def is_whitelisted(
         self, db_session: AsyncSession, user_id: int, guild_id: int
@@ -520,6 +652,16 @@ class ImpersonationDetectionService:
 
             if existing:
                 # Update existing
+                profile_image_url = profile.get("profile_image_url")
+                profile_image_hash = existing.profile_image_hash
+                if profile_image_url and (
+                    profile_image_url != existing.profile_image_url
+                    or profile_image_hash is None
+                ):
+                    profile_image_hash = await self._get_avatar_hash(
+                        profile_image_url
+                    )
+
                 await StreamerCacheRepository.update(
                     db_session,
                     twitch_user_id=twitch_user_id,
@@ -528,10 +670,17 @@ class ImpersonationDetectionService:
                     follower_count=follower_count,
                     description=description,
                     has_discord_link=has_discord_link,
-                    profile_image_url=profile.get("profile_image_url"),
+                    profile_image_url=profile_image_url,
+                    profile_image_hash=profile_image_hash,
                 )
             else:
                 # Create new
+                profile_image_url = profile.get("profile_image_url")
+                profile_image_hash = None
+                if profile_image_url:
+                    profile_image_hash = await self._get_avatar_hash(
+                        profile_image_url
+                    )
                 await StreamerCacheRepository.create(
                     db_session,
                     twitch_user_id=twitch_user_id,
@@ -540,7 +689,8 @@ class ImpersonationDetectionService:
                     follower_count=follower_count,
                     description=description,
                     has_discord_link=has_discord_link,
-                    profile_image_url=profile.get("profile_image_url"),
+                    profile_image_url=profile_image_url,
+                    profile_image_hash=profile_image_hash,
                 )
 
             await db_session.commit()
@@ -642,6 +792,14 @@ class ImpersonationDetectionService:
 
                 # Add to cache
                 try:
+                    profile_image_url = profile.get("thumbnail_url") or profile.get(
+                        "profile_image_url"
+                    )
+                    profile_image_hash = None
+                    if profile_image_url:
+                        profile_image_hash = await self._get_avatar_hash(
+                            profile_image_url
+                        )
                     await StreamerCacheRepository.create(
                         db_session,
                         twitch_user_id=twitch_user_id,
@@ -650,8 +808,8 @@ class ImpersonationDetectionService:
                         follower_count=follower_count,
                         description=description,
                         has_discord_link=has_discord_link,
-                        profile_image_url=profile.get("thumbnail_url")
-                        or profile.get("profile_image_url"),
+                        profile_image_url=profile_image_url,
+                        profile_image_hash=profile_image_hash,
                     )
                     added_count += 1
                     logger.info(

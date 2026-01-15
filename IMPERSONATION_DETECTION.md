@@ -98,6 +98,7 @@ Example Patterns:
 | **Bio Match** | 20 | Does the Discord bio match the streamer's Twitch bio? |
 | **Streamer Popularity** | 10 | Is the streamer in the target range (1k-50k followers)? |
 | **Discord Server Absence** | 10 | Does the streamer lack a Discord link on Twitch? |
+| **Avatar Match** | 10 | Do the Discord and Twitch avatars visually match? |
 
 ### Risk Levels
 
