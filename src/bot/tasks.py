@@ -201,6 +201,13 @@ def setup_tasks(bot: commands.Bot) -> None:
 
             # Process each guild
             for guild_config in guild_configs:
+                if not guild_config.auto_role_assignment_enabled:
+                    logger.debug(
+                        "Auto role assignment disabled for guild %s, skipping mismatch check",
+                        guild_config.guild_id,
+                    )
+                    continue
+
                 guild = bot.get_guild(guild_config.guild_id)
                 if not guild:
                     logger.warning(
