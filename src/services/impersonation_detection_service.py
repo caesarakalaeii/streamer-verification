@@ -227,9 +227,7 @@ class ImpersonationDetectionService:
                 )
                 return None
 
-            matched_streamer: StreamerCache = best_match["streamer"]  # type: ignore[
-                assignment
-            ]
+            matched_streamer: StreamerCache = best_match["streamer"]  # type: ignore[assignment]
             matched_scores: ScoreDict = best_match["scores"]  # type: ignore[assignment]
 
             # Optional avatar comparison (only for strong username matches)
@@ -675,9 +673,7 @@ class ImpersonationDetectionService:
                     profile_image_url != existing.profile_image_url
                     or profile_image_hash is None
                 ):
-                    profile_image_hash = await self._get_avatar_hash(
-                        profile_image_url
-                    )
+                    profile_image_hash = await self._get_avatar_hash(profile_image_url)
 
                 await StreamerCacheRepository.update(
                     db_session,
@@ -695,9 +691,7 @@ class ImpersonationDetectionService:
                 profile_image_url = profile.get("profile_image_url")
                 profile_image_hash = None
                 if profile_image_url:
-                    profile_image_hash = await self._get_avatar_hash(
-                        profile_image_url
-                    )
+                    profile_image_hash = await self._get_avatar_hash(profile_image_url)
                 await StreamerCacheRepository.create(
                     db_session,
                     twitch_user_id=twitch_user_id,

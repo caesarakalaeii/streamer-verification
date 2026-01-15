@@ -470,7 +470,11 @@ Complete audit trail of all verification actions for security monitoring. Includ
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
-# Install pre-commit hooks (recommended)
+# Install pre-commit hooks (recommended, uses .venv)
+./scripts/setup_precommit.sh
+# Uses PRE_COMMIT_HOME=.cache/pre-commit and patches the hook to set it.
+
+# Manual install (if you prefer pipx)
 pipx install pre-commit
 pre-commit install
 
