@@ -79,11 +79,13 @@ class ImpersonationDetectionService:
             )
             if is_whitelisted:
                 logger.debug(
-                    f"User {member.id} is whitelisted in guild {guild_id}, skipping check"
+                    f"User {member.id} is whitelisted in guild {guild_id}, "
+                    "skipping check"
                 )
                 return None
 
-            # Check if user has trusted role (e.g., Discord's native Twitch verification)
+            # Check if user has trusted role (e.g., Discord's native Twitch
+            # verification)
             if guild_config.impersonation_trusted_role_ids:
                 trusted_role_ids = [
                     int(rid)
@@ -92,7 +94,8 @@ class ImpersonationDetectionService:
                 ]
                 if any(role.id in trusted_role_ids for role in member.roles):
                     logger.debug(
-                        f"User {member.id} has trusted role in guild {guild_id}, skipping check"
+                        f"User {member.id} has trusted role in guild {guild_id}, "
+                        "skipping check"
                     )
                     return None
 
@@ -156,8 +159,12 @@ class ImpersonationDetectionService:
                 # Log current rate limit usage
                 current, maximum = twitch_rate_limiter.get_current_usage()
                 logger.info(
-                    f"No strong match in cache for {member.name} (score: {best_score}), "
-                    f"auto-populating from Twitch API (rate limit: {current}/{maximum})"
+                    "No strong match in cache for %s (score: %s), "
+                    "auto-populating from Twitch API (rate limit: %s/%s)",
+                    member.name,
+                    best_score,
+                    current,
+                    maximum,
                 )
 
                 # Use semaphore to limit concurrent auto-populate operations
@@ -209,7 +216,9 @@ class ImpersonationDetectionService:
                             }
 
                     logger.info(
-                        f"After auto-populate: best score {best_score} for {member.name}"
+                        "After auto-populate: best score %s for %s",
+                        best_score,
+                        member.name,
                     )
 
             if best_match is None:
@@ -218,7 +227,9 @@ class ImpersonationDetectionService:
                 )
                 return None
 
-            matched_streamer: StreamerCache = best_match["streamer"]  # type: ignore[assignment]
+            matched_streamer: StreamerCache = best_match["streamer"]  # type: ignore[
+                assignment
+            ]
             matched_scores: ScoreDict = best_match["scores"]  # type: ignore[assignment]
 
             # Optional avatar comparison (only for strong username matches)
@@ -249,7 +260,9 @@ class ImpersonationDetectionService:
             # If best score is below 40, not suspicious enough to report
             if best_score < 40 or best_match is None:
                 logger.debug(
-                    f"User {member.id} best score {best_score} below threshold, not suspicious"
+                    "User %s best score %s below threshold, not suspicious",
+                    member.id,
+                    best_score,
                 )
                 return None
 
@@ -280,8 +293,11 @@ class ImpersonationDetectionService:
             await db_session.commit()
 
             logger.info(
-                f"Detected potential impersonation: {member.name} -> {matched_streamer.twitch_username} "
-                f"(score: {matched_scores['total_score']}, risk: {matched_scores['risk_level']})"
+                "Detected potential impersonation: %s -> %s (score: %s, risk: %s)",
+                member.name,
+                matched_streamer.twitch_username,
+                matched_scores["total_score"],
+                matched_scores["risk_level"],
             )
 
             # Return detection details
@@ -399,7 +415,8 @@ class ImpersonationDetectionService:
 
         score = 0.0
 
-        # Pattern 1: Adding random numbers (e.g., "hiswattson247" -> "hiswattson2470923")
+        # Pattern 1: Adding random numbers
+        # Example: "hiswattson247" -> "hiswattson2470923"
         # Extract base (letters only)
         base1 = re.sub(r"\d+", "", norm1)
         base2 = re.sub(r"\d+", "", norm2)
@@ -695,7 +712,9 @@ class ImpersonationDetectionService:
 
             await db_session.commit()
             logger.info(
-                f"Refreshed cache for streamer {profile.get('login')} ({twitch_user_id})"
+                "Refreshed cache for streamer %s (%s)",
+                profile.get("login"),
+                twitch_user_id,
             )
             return True
 
@@ -813,7 +832,9 @@ class ImpersonationDetectionService:
                     )
                     added_count += 1
                     logger.info(
-                        f"Added {twitch_username} to cache (followers: {follower_count})"
+                        "Added %s to cache (followers: %s)",
+                        twitch_username,
+                        follower_count,
                     )
                 except Exception as e:
                     logger.warning(f"Failed to add {twitch_username} to cache: {e}")
@@ -826,7 +847,9 @@ class ImpersonationDetectionService:
 
             await db_session.commit()
             logger.info(
-                f"Auto-populated cache: added {added_count} streamers from search '{search_query}'"
+                "Auto-populated cache: added %s streamers from search '%s'",
+                added_count,
+                search_query,
             )
             return added_count
 

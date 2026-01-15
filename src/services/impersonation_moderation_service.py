@@ -52,7 +52,10 @@ class ImpersonationModerationService:
         # Create embed
         embed = discord.Embed(
             title="🚨 Suspicious User Detected",
-            description=f"Potential impersonation of **{detection.suspected_streamer_username}**",
+            description=(
+                "Potential impersonation of "
+                f"**{detection.suspected_streamer_username}**"
+            ),
             color=embed_color,
         )
 
@@ -76,7 +79,10 @@ class ImpersonationModerationService:
             "medium": "🟡",
             "low": "🟢",
         }
-        risk_display = f"{risk_emoji.get(detection.risk_level, '⚪')} {detection.risk_level.upper()}"
+        risk_display = (
+            f"{risk_emoji.get(detection.risk_level, '⚪')} "
+            f"{detection.risk_level.upper()}"
+        )
 
         detection_info = (
             f"**Similarity Score:** ⚠️ {detection.total_score}/100 ({risk_display})\n"
@@ -106,9 +112,7 @@ class ImpersonationModerationService:
                 f"• No Discord Link: {detection.discord_absence_score}/10"
             )
         if detection.avatar_match_score > 0:
-            indicators.append(
-                f"• Avatar Match: {detection.avatar_match_score}/10"
-            )
+            indicators.append(f"• Avatar Match: {detection.avatar_match_score}/10")
 
         if indicators:
             embed.add_field(
@@ -172,7 +176,8 @@ class ImpersonationModerationService:
             moderation_channel, discord.TextChannel
         ):
             logger.error(
-                f"Moderation channel {guild_config.impersonation_moderation_channel_id} not found or not a text channel"
+                "Moderation channel %s not found or not a text channel",
+                guild_config.impersonation_moderation_channel_id,
             )
             return None
 
@@ -202,13 +207,16 @@ class ImpersonationModerationService:
                 await db_session.commit()
 
             logger.info(
-                f"Sent impersonation alert for detection {detection.id} to channel {moderation_channel.id}"
+                "Sent impersonation alert for detection %s to channel %s",
+                detection.id,
+                moderation_channel.id,
             )
             return message
 
         except discord.Forbidden:
             logger.error(
-                f"No permission to send message to moderation channel {moderation_channel.id}"
+                "No permission to send message to moderation channel %s",
+                moderation_channel.id,
             )
             return None
         except Exception as e:
@@ -241,7 +249,9 @@ class ImpersonationModerationService:
         )
         if not quarantine_role:
             logger.error(
-                f"Quarantine role {guild_config.impersonation_quarantine_role_id} not found in guild {member.guild.id}"
+                "Quarantine role %s not found in guild %s",
+                guild_config.impersonation_quarantine_role_id,
+                member.guild.id,
             )
             return False
 
@@ -255,7 +265,9 @@ class ImpersonationModerationService:
             return True
         except discord.Forbidden:
             logger.error(
-                f"No permission to add quarantine role to {member.id} in guild {member.guild.id}"
+                "No permission to add quarantine role to %s in guild %s",
+                member.id,
+                member.guild.id,
             )
             return False
         except Exception as e:
@@ -293,12 +305,16 @@ class ImpersonationModerationService:
                     quarantine_role, reason="Impersonation review completed"
                 )
                 logger.info(
-                    f"Removed quarantine role from {member.id} in guild {member.guild.id}"
+                    "Removed quarantine role from %s in guild %s",
+                    member.id,
+                    member.guild.id,
                 )
             return True
         except discord.Forbidden:
             logger.error(
-                f"No permission to remove quarantine role from {member.id} in guild {member.guild.id}"
+                "No permission to remove quarantine role from %s in guild %s",
+                member.id,
+                member.guild.id,
             )
             return False
         except Exception as e:
@@ -325,13 +341,19 @@ class ImpersonationModerationService:
         try:
             embed = discord.Embed(
                 title="🔍 Identity Verification Required",
-                description="Our automated system has flagged your account for potential impersonation.",
+                description=(
+                    "Our automated system has flagged your account for potential "
+                    "impersonation."
+                ),
                 color=discord.Color.orange(),
             )
 
             embed.add_field(
                 name="What happened?",
-                value=f"Your username and profile closely resemble the Twitch streamer **{detection.suspected_streamer_username}**.",
+                value=(
+                    "Your username and profile closely resemble the Twitch streamer "
+                    f"**{detection.suspected_streamer_username}**."
+                ),
                 inline=False,
             )
 
@@ -339,7 +361,8 @@ class ImpersonationModerationService:
                 name="If you are NOT impersonating anyone:",
                 value=(
                     "1. Contact server moderators to explain\n"
-                    "2. Consider changing your username/avatar if similar to the streamer\n"
+                    "2. Consider changing your username/avatar if similar to the "
+                    "streamer\n"
                     "3. Wait for moderator review"
                 ),
                 inline=False,
@@ -437,7 +460,10 @@ class ImpersonationModerationService:
                     )
                     warning_embed.add_field(
                         name="Action Required",
-                        value="Please review your username and profile to avoid confusion with other users.",
+                        value=(
+                            "Please review your username and profile to avoid "
+                            "confusion with other users."
+                        ),
                         inline=False,
                     )
                     try:
@@ -496,7 +522,10 @@ class ImpersonationModerationService:
 
             await db_session.commit()
             logger.info(
-                f"Executed action '{action}' on detection {detection.id} by moderator {moderator.id}"
+                "Executed action '%s' on detection %s by moderator %s",
+                action,
+                detection.id,
+                moderator.id,
             )
             return True, message
 
