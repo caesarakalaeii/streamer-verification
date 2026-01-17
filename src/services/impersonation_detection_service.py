@@ -156,6 +156,20 @@ class ImpersonationDetectionService:
             # Auto-populate cache if no good match found
             # This happens when cache is empty or user resembles an uncached streamer
             if best_score < self.min_similarity_threshold or not best_match:
+                # Check if we've already checked this user before to avoid redundant API calls
+                existing_detection = (
+                    await ImpersonationDetectionRepository.get_by_user_and_guild(
+                        db_session, member.id, guild_id
+                    )
+                )
+
+                if existing_detection:
+                    logger.debug(
+                        f"User {member.id} already checked previously in guild {guild_id}, "
+                        "skipping auto-populate to save rate limits"
+                    )
+                    return None
+
                 # Log current rate limit usage
                 current, maximum = twitch_rate_limiter.get_current_usage()
                 logger.info(
