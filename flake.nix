@@ -16,7 +16,14 @@
   outputs =
     # `...` rather than a closed { self, nixpkgs }: adding a second input later
     # would otherwise fail with "called with unexpected argument 'self'".
-    { nixpkgs, ... }:
+    #
+    # `self` is not decoration: it is the only way a wrapper sitting in the store
+    # can name this repo's own files, and that is what anchors every verb (see
+    # rootPreamble). It does mean all five verb wrappers rebuild whenever a
+    # tracked file changes -- measured at 2.5 s for all five including their
+    # shellcheck runs, and worth it. dev-help does not reference the source, so
+    # it is not rebuilt.
+    { self, nixpkgs, ... }:
     let
       lib = nixpkgs.lib;
 
@@ -124,14 +131,46 @@
       # "$REPO_ROOT/.venv/bin/...". That is not a style choice: the wrappers
       # PREPEND the nix toolchain to PATH, so a bare `pytest` or `ruff` would
       # resolve to a store copy and miss everything `dev-setup` installed.
+      #
+      # That one fact also decides the anchoring shape of this repo: EVERY verb
+      # here needs the pinned tools in .venv, and a .venv only ever exists in a
+      # checkout -- never in the read-only store snapshot, which cannot even
+      # build one. So every verb calls `require_work_tree` and none of them has
+      # the $SRC_ROOT fallback that fleet repos with nix-provided linters use for
+      # their read-only verbs. `nix run <url>#lint` from an unrelated directory
+      # therefore refuses with exit 1 and says why. That is the honest answer:
+      # the alternative it replaced reported "all checks passed" after inspecting
+      # nothing, and `nix run <url>#fmt` rewrote a stranger's Python.
+      #
+      # Every verb that hands a path to a tool also `cd`s to the root first, and
+      # its default targets are RELATIVE to that. Both halves are load-bearing:
+      # absolute defaults alone still leave the tool pointed at the caller's cwd
+      # the moment an argument is a flag rather than a path (`dev-lint --fix`,
+      # `dev-test -k impersonation`), because any argument at all suppresses the
+      # default. Standing in the root closes that, keeps every tool cache
+      # (.ruff_cache, .mypy_cache, .pytest_cache) inside the tree where
+      # .gitignore already covers it, and makes a relative path argument mean the
+      # same thing from any directory.
       commands = pkgs: {
         setup = {
-          description = "(network) create .venv and install requirements-dev.txt";
+          description = "(network) create/update .venv from requirements-dev.txt";
           # requirements-dev.txt starts with `-r requirements.txt`, so this one
           # install covers the runtime deps too -- same as CI, which installs
           # both files.
+          #
+          # --allow-existing is not cosmetic: without it a second `dev-setup` --
+          # the obvious move after a requirements change, and what every agent
+          # retry loop does -- dies with "A virtual environment already exists
+          # at: .venv" and exit 2 under `set -euo pipefail`, BEFORE the install
+          # line runs. Verified against uv 0.12.3. Do not "fix" that with
+          # --clear instead: that deletes the whole venv to add one package.
+          #
+          # A .venv belongs to a checkout and the store snapshot is read-only, so
+          # there is nothing sensible to do without one -- least of all unpacking
+          # wheels into whichever directory the caller happened to stand in.
           text = ''
-            uv venv "$REPO_ROOT/.venv"
+            require_work_tree
+            uv venv --allow-existing "$REPO_ROOT/.venv"
             uv pip install --python "$REPO_ROOT/.venv/bin/python" -r "$REPO_ROOT/requirements-dev.txt" "$@"
           '';
         };
@@ -139,6 +178,10 @@
         test = {
           description = "run the pytest suite (needs `setup` first)";
           text = ''
+            # Needs the pinned pytest from .venv, and writes .pytest_cache (plus
+            # coverage data when asked for it) into the tree.
+            require_work_tree
+
             # src/config.py is instantiated at import time and every field below
             # is required, so without these the suite dies during collection
             # with a pydantic ValidationError rather than a test failure. These
@@ -161,18 +204,22 @@
             export DATABASE_USER="''${DATABASE_USER:-test_user}"
             export DATABASE_PASSWORD="''${DATABASE_PASSWORD:-test_pass}"
 
-            # Both halves of this invocation were arrived at empirically, and
-            # neither is sufficient alone. -c makes pytest read
-            # [tool.pytest.ini_options] out of pyproject.toml no matter where it
-            # was invoked from. The explicit tests path is what anchors rootdir
-            # and collection: `testpaths = ["tests"]` is resolved against the
-            # caller's directory, not against the config file, so `dev-test` from
-            # a subdirectory reported "collected 0 items / no tests ran" -- exit
-            # code 0 on a suite that never executed, which is the worst possible
-            # answer to give an agent. --rootdir does not fix it either.
-            # Arguments passed by the caller replace the default target.
+            # All three halves of this invocation were arrived at empirically, and
+            # none is sufficient alone. The cd puts every relative path -- the
+            # default target, a caller's `tests/test_bot.py`, and pytest's own
+            # cache -- in the same frame no matter where the command ran from. -c
+            # makes pytest read [tool.pytest.ini_options] out of pyproject.toml
+            # rather than hunting for a config near the invocation. The explicit
+            # tests path is what anchors rootdir and collection: `testpaths =
+            # ["tests"]` is resolved against the CURRENT directory, not against
+            # the config file, so `dev-test` from a subdirectory reported
+            # "collected 0 items / no tests ran" -- exit code 0 on a suite that
+            # never executed, which is the worst possible answer to give an
+            # agent. --rootdir does not fix it either. Arguments passed by the
+            # caller replace the default target.
+            cd "$REPO_ROOT"
             if [ "$#" -eq 0 ]; then
-              set -- "$REPO_ROOT/tests"
+              set -- tests
             fi
             "$REPO_ROOT/.venv/bin/python" -m pytest -c "$REPO_ROOT/pyproject.toml" "$@"
           '';
@@ -181,11 +228,20 @@
         lint = {
           description = "black --check + ruff + mypy over src/, exactly as CI (needs `setup` first)";
           text = ''
+            # Work-tree-only, on two counts: the three gates ARE the pinned copies
+            # in .venv and the store snapshot has none, and ruff and mypy drop
+            # their incremental caches in $PWD, which is a write. So it reports
+            # identical findings from any directory inside the checkout, and
+            # refuses outright from outside it -- never a green that inspected
+            # nothing, and never a .ruff_cache in a stranger's directory.
+            require_work_tree
+            cd "$REPO_ROOT"
+
             # Same three gates, same order, same pinned tools as the
             # lint-and-test job in .github/workflows/ci.yml. set -e stops at the
             # first failure, which is also how CI reports.
             if [ "$#" -eq 0 ]; then
-              set -- "$REPO_ROOT/src"
+              set -- src
             fi
             "$REPO_ROOT/.venv/bin/black" --check "$@"
             "$REPO_ROOT/.venv/bin/ruff" check "$@"
@@ -196,12 +252,20 @@
         fmt = {
           description = "black + ruff --fix (rewrites files, needs `setup` first)";
           text = ''
+            # MUTATING, so the guard comes before anything else and no default
+            # below it can reach the caller's cwd. With the old `|| pwd` anchor
+            # "$REPO_ROOT/src" meant "the caller's src", which is precisely how
+            # `nix run /path/to/this-repo#fmt` from a sibling checkout reformatted
+            # Python belonging to a different project.
+            require_work_tree
+            cd "$REPO_ROOT"
+
             # Mirrors .pre-commit-config.yaml: black first, then ruff's
             # autofixes. black is the formatter CI gates on, so ruff format must
             # never be substituted here -- the two disagree and CI would reject
             # the result.
             if [ "$#" -eq 0 ]; then
-              set -- "$REPO_ROOT/src" "$REPO_ROOT/tests" "$REPO_ROOT/scripts"
+              set -- src tests scripts
             fi
             "$REPO_ROOT/.venv/bin/black" "$@"
             "$REPO_ROOT/.venv/bin/ruff" check --fix "$@"
@@ -211,12 +275,27 @@
         run = {
           description = "start the bot and its web server (needs `setup`, a .env and a reachable PostgreSQL)";
           text = ''
+            # Needs the checkout twice over: the interpreter `setup` built in
+            # .venv, and the .env plus migrations it reads out of the tree.
+            require_work_tree
+
             # PYTHONPATH is load-bearing, not decoration: src/main.py does
             # `from src.config import config`, and running a script puts the
             # SCRIPT's directory (src/) on sys.path -- never the repo root. The
             # Dockerfile solves this with ENV PYTHONPATH=/app; this is the same
             # fix, anchored so it also works from a subdirectory.
             export PYTHONPATH="$REPO_ROOT''${PYTHONPATH:+:$PYTHONPATH}"
+
+            # The cd is not redundant next to those absolute paths, for two
+            # reasons that both bite. src/config.py sets `env_file=".env"`, which
+            # pydantic-settings resolves against the CURRENT directory, so from
+            # anywhere else this found no .env and died with a dozen "field
+            # required" errors on a tree that is perfectly well configured. And
+            # src/database/connection.py does `Path("src/database/migrations")`,
+            # also cwd-relative -- there .glob() on a missing directory raises
+            # nothing and yields nothing, so the migrations are skipped in
+            # silence.
+            cd "$REPO_ROOT"
             exec "$REPO_ROOT/.venv/bin/python" "$REPO_ROOT/src/main.py" "$@"
           '';
         };
@@ -236,13 +315,54 @@
           export LD_LIBRARY_PATH="${lib.makeLibraryPath (nativeLibs pkgs)}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
         '';
 
-      # Every command gets $REPO_ROOT. `nix run` and `nix develop` both start in
-      # whatever directory they were invoked from, so a bare `.venv` silently
-      # forks a second environment as soon as an agent works from a subdirectory.
-      # Note we do NOT cd there: commands act on the caller's cwd on purpose.
+      # Every command gets two anchors, and NEITHER of them is the caller's cwd.
+      #
+      #   $SRC_ROOT   this flake's own source tree as copied into the store when
+      #               the wrapper was built: always present, always exactly this
+      #               repo's content, always read-only. It is the only repo path
+      #               `nix run /elsewhere/this-repo#lint` can be certain of -- the
+      #               wrapper is a store path and has no idea where the checkout
+      #               it came from lives. It sees git-tracked files only, so a
+      #               brand new file is invisible until `git add`.
+      #   $REPO_ROOT  the live checkout, or EMPTY when the caller is not standing
+      #               in it. Preferred whenever it exists: it is writable and it
+      #               sees edits the snapshot does not.
+      #
+      # The previous `git rev-parse --show-toplevel || pwd` was worse than no
+      # anchor at all. From an unrelated directory it resolved to that directory,
+      # so `nix run <url>#lint` -- the form CI and a cold agent use -- reported
+      # "All checks passed!" having inspected zero of this repo's files, and
+      # `nix run <url>#fmt` rewrote a stranger's source. `git rev-parse` on its
+      # own is not enough either: run from inside some OTHER checkout it happily
+      # reports that repo. So a candidate only counts as ours when every
+      # top-level name in the snapshot also exists in it -- cheap, needs no tool
+      # beyond the shell, and unlike comparing flake.nix it survives editing this
+      # file.
+      #
+      # Read-only verbs can then fall back to $SRC_ROOT and report the same thing
+      # from any cwd. Verbs that write or keep state call `require_work_tree` and
+      # refuse instead: the snapshot is read-only, and the caller's directory is
+      # not ours to guess at. In THIS repo every verb needs the pinned tools in
+      # .venv, so every verb takes the second path -- see PER-REPO BLOCK 4.
       rootPreamble = ''
-        REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-        export REPO_ROOT
+        SRC_ROOT=${self}
+        REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+        if [ -n "$REPO_ROOT" ]; then
+          for entry in "$SRC_ROOT"/*; do
+            [ -e "$REPO_ROOT/''${entry##*/}" ] || { REPO_ROOT=""; break; }
+          done
+        fi
+        export SRC_ROOT REPO_ROOT
+
+        # Called by every verb that writes, before it writes anything.
+        require_work_tree() {
+          if [ -z "$REPO_ROOT" ]; then
+            echo "''${0##*/}: this verb writes to the checkout, and the directory" >&2
+            echo "  you called from is not one. Run it from inside the work tree," >&2
+            echo "  or from a \`nix develop\` started there." >&2
+            exit 1
+          fi
+        }
       '';
 
       # One derivation per command, reused by both `apps` and the dev shell, so
